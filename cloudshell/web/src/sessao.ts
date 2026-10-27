@@ -53,9 +53,9 @@ export async function abrirTerminal(): Promise<true | string> {
 
 /** Texto da recusa do gateway, com o código entre parênteses. */
 export function recusa(codigo: string): string {
-  if (codigo === 'CONFIG_AUSENTE') return 'O CloudShell ainda não está configurado no LoginHUB (CONFIG_AUSENTE).';
+  if (codigo === 'CONFIG_AUSENTE') return 'O OmegaShell ainda não está configurado no LoginHUB (CONFIG_AUSENTE).';
   if (codigo === 'SESSAO_REVOGADA') return 'Sessão revogada no LoginHUB. Entre de novo (SESSAO_REVOGADA).';
-  return `Sessão recusada pelo CloudShell (${codigo}).`;
+  return `Sessão recusada pelo OmegaShell (${codigo}).`;
 }
 
 /** Sai do terminal: apaga o cookie do gateway e a sessão do kit. */

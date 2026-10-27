@@ -105,7 +105,7 @@
     var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
     raiz = document.createElement('div'); raiz.id = 'csi';
     var w = document.createElement('div'); w.className = 'w'; raiz.appendChild(w);
-    var mc = document.createElement('div'); mc.className = 'marca'; mc.textContent = 'Astral Wave · CloudShell'; w.appendChild(mc);
+    var mc = document.createElement('div'); mc.className = 'marca'; mc.textContent = 'Astral Wave · OmegaShell'; w.appendChild(mc);
     var h1 = document.createElement('h1'); h1.appendChild(document.createTextNode('Para onde '));
     var sp = document.createElement('span'); sp.textContent = 'vamos?'; h1.appendChild(sp); w.appendChild(h1);
     var hr = document.createElement('div'); hr.className = 'hora'; w.appendChild(hr);

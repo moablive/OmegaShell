@@ -131,7 +131,7 @@
     var lista = sessoes(), acoes = menu.i.filter(function (it) { return it.g === 'ações'; });
     w.textContent = '';
     var topo = tag('div', 'topo', null, w), tt = tag('div', null, null, topo);
-    tag('div', 'marca', 'Astral Wave · CloudShell', tt);
+    tag('div', 'marca', 'Astral Wave · OmegaShell', tt);
     var M = modo(), h = tag('h1', null, M.titulo, tt); tag('small', null, M.conta(lista.length) + ' · ao vivo', h);
     var ac = tag('div', 'acoes', null, topo);
     function acao(rot, k, fn) {

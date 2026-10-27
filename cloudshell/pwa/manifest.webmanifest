@@ -1,7 +1,7 @@
 {
-  "name": "Astral Wave CloudShell",
-  "short_name": "CloudShell",
-  "description": "Terminal do awlsrv no navegador",
+  "name": "OmegaShell",
+  "short_name": "OmegaShell",
+  "description": "Gerenciador multi-IA para múltiplos servidores: Claude, Gemini e terminais numa tela só",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -10,7 +10,7 @@ set -u
 conta_hub=${1:-}
 if ! [[ $conta_hub =~ ^[0-9]{1,12}$ ]]; then
   echo "$(date -Iseconds) cloudshell-login: recusado sem conta do hub" > /proc/1/fd/1 2>/dev/null || true
-  printf 'CloudShell: sessão sem conta do LoginHUB. Entre de novo.\n'
+  printf 'OmegaShell: sessão sem conta do LoginHUB. Entre de novo.\n'
   sleep 10
   exit 1
 fi
@@ -20,7 +20,7 @@ echo "$(date -Iseconds) cloudshell-login: conta_hub=${conta_hub} ssh awlsrv@awls
 
 # -f e não -r: se o arquivo faltar no up, o docker cria um DIRETÓRIO no lugar (e -r passaria).
 if [ ! -f /run/cloudshell/id_ed25519 ]; then
-  printf '\033[1;31mCloudShell sem a chave do awlsrv.\033[0m Rode ~/sh/cloudshell-chave-awlsrv.sh no servidor.\n'
+  printf '\033[1;31mOmegaShell sem a chave do awlsrv.\033[0m Rode ~/sh/cloudshell-chave-awlsrv.sh no servidor.\n'
   sleep 30
   exit 1
 fi

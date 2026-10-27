@@ -230,7 +230,7 @@ case $acao in
         omega|sh)
           [[ ${CS_ATALHO:-} == 1 ]] || continue
           if [[ $jn == omega ]]; then jk=O ic=Ω d='sessões'; else jk=S ic=🧾 d='scripts ~/sh'; fi
-          bfix+=("CloudShell|$ic|$jn|$d|$jk")
+          bfix+=("OmegaShell|$ic|$jn|$d|$jk")
           mfix+=("$ic $jn ($d)" "$jk" "select-window -t $j")
           continue ;;
         conselho) continue ;;

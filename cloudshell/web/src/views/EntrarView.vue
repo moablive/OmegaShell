@@ -84,7 +84,7 @@ async function enrolado() {
   <div v-else class="cartao">
     <div class="topo">
       <img src="/favicon-192.png" alt="Astral Wave" />
-      <h1>CloudShell</h1>
+      <h1>OmegaShell</h1>
       <p>Terminal dos servidores da Astral Wave</p>
     </div>
 

@@ -9,7 +9,7 @@ ttyd \
   --writable --check-origin \
   --url-arg \
   --ping-interval 25 \
-  -t titleFixed="CloudShell" \
+  -t titleFixed="OmegaShell" \
   -t fontSize=15 \
   -t macOptionClickForcesSelection=true \
   -t 'fontFamily="\"CloudShell Nerd\", JetBrains Mono, Menlo, Consolas, monospace"' \

@@ -60,7 +60,7 @@ async function enrolado() {
     <div class="topo">
       <img src="/favicon-192.png" alt="Astral Wave" />
       <h1>Defina sua senha</h1>
-      <p>Primeiro acesso ao CloudShell.</p>
+      <p>Primeiro acesso ao OmegaShell.</p>
     </div>
 
     <form v-if="!token" @submit.prevent="router.replace('/entrar')">
