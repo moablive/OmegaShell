@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Ícone do CloudShell: nuvem + prompt de terminal, cores da Astral Wave.
+       Fonte dos PNGs do PWA e do logo do app no LoginHUB (gerar-icones.sh). -->
+  <defs>
+    <linearGradient id="fundo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a1430"/>
+      <stop offset="1" stop-color="#0b0b14"/>
+    </linearGradient>
+    <linearGradient id="nuvem" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d0b3ff"/>
+      <stop offset="1" stop-color="#7c4dff"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#fundo)"/>
+  <circle cx="256" cy="150" r="190" fill="#b388ff" opacity=".10"/>
+  <g transform="translate(-12 26)">
+  <path d="M150 352h220a72 72 0 0 0 8-143.6A104 104 0 0 0 176 196a80 80 0 0 0-26 156z"
+        fill="none" stroke="url(#nuvem)" stroke-width="26" stroke-linejoin="round"/>
+  <path d="M200 236l44 36-44 36" fill="none" stroke="#e6e6f0" stroke-width="24"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M266 310h58" stroke="#e6e6f0" stroke-width="24" stroke-linecap="round"/>
+  </g>
+</svg>

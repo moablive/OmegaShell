@@ -1,0 +1,947 @@
+#!/usr/bin/env bash
+# omega do SERVIDOR (23/10/2026) — o mesmo papel do omega do Mac (scripts/mac/omega), para usar
+# dentro do CloudShell (terminal web da Astral Wave, que entra como awlsrv). Instalado em
+# /usr/local/bin/omega. Documentação: "Projeto - Moabinho IA ／ Documento Ômega" e
+# "Projeto - Astral Wave ／ CloudShell", pasta awldocs do Drive.
+#
+# Diferenças do Mac, de propósito:
+# - Sem Keychain: quem digita a senha é a pessoa, ou ~/.config/omega/sudo-senha (600) se existir. O sudo do awlsrv
+#   é pedido uma vez e fica no cache do sudo; o cabeçalho Ômega de cada ~/sh pede a dele.
+# - Sem ssh: tudo é deste servidor. Terminais e ~/sh do dono ($DONO_SH) via `sudo -u`,
+#   do root via `sudo`. O bf e o Mac entram pelo ssh do dono do ~/sh (24/10/2026).
+# - Mesmo rodador e mesmos logs do omega do Mac (~<dono>/.cache/omega-sh/): uma execução
+#   começada lá aparece aqui, e vice-versa (sessão tmux sh-<script> do dono).
+# - Todo tmux daqui é o servidor PADRÃO de cada conta (-L default): dentro do CloudShell o $TMUX
+#   aponta para o tmux dele (-L cloudshell), e sem o -L o awlsrv listaria o do CloudShell.
+#
+# Uso: omega            menu (terminais tmux; n nova sessão com Claude; r N renomeia; d N encerra; sh scripts)
+#      omega sh         direto na lista dos ~/sh (número roda; t = automático na ordem)
+#      omega rodar x.sh roda um ~/sh nesta tela (a aba que o sh abre no CloudShell)
+#      omega entrar c s entra na sessão tmux s da conta c (a aba que o menu abre no CloudShell)
+#      omega nova       nova sessão (servidor, Claude ou terminal, nome) — a aba do 🖥️ Nova sessão… do CloudShell
+#      omega --help     esta ajuda
+set -uo pipefail
+
+# Sem locale UTF-8 (o comando forçado do CloudShell não herda LANG) o ${#x} conta bytes e as
+# colunas com "á"/"º" desalinham.
+[[ ${LC_ALL:-${LC_CTYPE:-${LANG:-}}} == *[Uu][Tt][Ff]* ]] || export LC_ALL=C.UTF-8
+EU=$(id -un)
+HOST_CURTO=$(hostname -s)
+# Contas cujos terminais aparecem (o tmux próprio do CloudShell, -L cloudshell, não entra).
+# O astralwave saiu em 26/10/2026 (V5 do "volta ao awlsrv único": conta travada, home apagado) — listar
+# o tmux dele era um sudo -u a cada 3 s para nada.
+CONTAS=(awlsrv root)
+# Dono dos ~/sh e das sessões novas: sempre o awlsrv (usuário único desde 25/10/2026). A chave
+# /etc/awl/omega-sh-dono da V2b não decide mais nada.
+DONO_SH=awlsrv
+HOME_SH=/home/$DONO_SH
+
+# Senha guardada (24/10/2026, pedido do dono: o omega da janela fixa do CloudShell "logado"):
+# ~/.config/omega/sudo-senha, só o dono lê (600). Sem ticket válido, renova com ela antes do
+# sudo. Se não servir, vira sudo-senha.errada: o painel ao vivo chama o sudo a cada 3 s, e repetir a
+# senha errada travaria a conta no faillock. Sem o arquivo, o sudo pede como sempre.
+# Conta travada no faillock (3 falhas válidas, padrão do /etc/security/faillock.conf) recusa até a
+# senha certa: aí não tenta nem marca .errada (26/10/2026 — a certa virou .errada assim); volta a
+# usar quando o bloqueio passa.
+faillock_travada() { (( $(faillock --user "$(id -un)" 2>/dev/null | grep -c ' V$') >= 3 )); }
+sudo_logado() {
+  local f=$HOME/.config/omega/sudo-senha
+  [[ -f $f && ! -L $f && -O $f && $(stat -c %a "$f") == 600 ]] || return 0
+  command sudo -n true 2>/dev/null && return 0
+  faillock_travada && return 0
+  command sudo -S -p '' -v <"$f" >/dev/null 2>&1 && return 0
+  faillock_travada && return 0
+  mv -f "$f" "$f.errada"
+  echo "⚠ a senha guardada em $f não serviu (agora $f.errada): o sudo vai pedir na tela" >&2
+}
+
+# Servidores remotos (24/10/2026, pedidos do dono: o bf e depois o Mac também no CloudShell): a
+# conta "bf" é o srv2 do srv2 e a "mac" é o macuser do Mac, pelo ssh do
+# dono do ~/sh (awlsrv: chave id_esteira e ControlMaster dele, Hosts do ~/.ssh/config). O ~/sh é só do awlsrv e do bf.
+REMOTOS=(bf mac)
+declare -A R_HOST=([bf]=srv2 [mac]=mac) R_DONO=([bf]=srv2 [mac]=macuser) \
+           R_HOME=([bf]=/home/srv2 [mac]=/Users/macuser) R_ESTADO=()
+BF=srv2 BF_DONO=srv2 BF_HOME=/home/srv2
+remoto() { [[ -n ${R_HOST[${1:-}]:-} ]]; }
+casa() { if remoto "$1"; then echo "${R_HOME[$1]}"; elif [[ $1 == root ]]; then echo /root; else echo "/home/$1"; fi; }
+servidor_de() { remoto "$1" && echo "${R_HOST[$1]}" || echo "$HOST_CURTO"; }
+
+# Roda um comando como a conta $1 (sem sudo se já for ela; sudo limpa o ambiente).
+como() {
+  local u=$1; shift
+  if remoto "$u"; then
+    # Com terminal dos dois lados vai -t (attach); com terminal só na entrada vai -n, para o ssh
+    # não comer o que a pessoa digita no menu; com pipe/heredoc o stdin segue (por isso as
+    # consultas que não leem nada passam </dev/null).
+    local -a t=()
+    if [[ -t 0 && -t 1 ]]; then t=(-t); elif [[ -t 0 ]]; then t=(-n); fi
+    # Aspas simples em todo argumento: o shell de lá é zsh, e o %q do printf não protege o "="
+    # inicial (=term, o alvo exato do tmux, virava "term: not found").
+    local a q=''
+    for a in "$@"; do q+="'${a//\'/\'\\\'\'}' "; done
+    # PATH: no Mac o tmux e o claude ficam fora do PATH do ssh (/usr/local/bin, ~/.local/bin).
+    como "$DONO_SH" ssh "${t[@]}" -o BatchMode=yes -o ConnectTimeout=3 "${R_HOST[$u]}" \
+      "export PATH=/usr/local/bin:/opt/homebrew/bin:\$HOME/.local/bin:\$PATH; $q"
+    return
+  fi
+  [[ $u == "$EU" ]] || sudo_logado
+  if [[ $u == "$EU" ]]; then "$@"
+  elif [[ $u == root ]]; then sudo -H "$@"
+  else sudo -u "$u" -H "$@"; fi
+}
+# tmux PADRÃO da conta $1, nunca o do $TMUX atual.
+tm() { local u=$1; shift; como "$u" env -u TMUX tmux -L default "$@"; }
+
+# Nomes que entram em comandos tmux/sudo: só [A-Za-z0-9._-], e não só pontos ("." / "..").
+nome_ok() { [[ $1 =~ ^[A-Za-z0-9._-]+$ && ! $1 =~ ^\.+$ ]]; }
+
+limpa() { printf '\e[H\e[2J\e[3J'; }
+pausa() {
+  local rc=0
+  botoes pausa "${1:-Enter = voltar}" "|↩️|Voltar||⏎"
+  read -rp "${1:-Enter = voltar} " _ || rc=1
+  botoes_some; return $rc
+}
+
+# Esta é a própria sessão onde o omega está (tmux padrão do awlsrv)? Anexar nela é espelho infinito.
+propria() {
+  local c=$1 s=$2
+  [[ -n ${TMUX:-} && $c == "$EU" && ${TMUX%%,*} == "/tmp/tmux-$(id -u)/default" ]] || return 1
+  [[ $(tmux display -p '#S' 2>/dev/null) == "$s" ]]
+}
+
+# ---------------------------------------------------------------- terminais
+# Por sessão: último_attach|anexados|nome|cmd|situação (regra do Moabinho, lib/subgo.ts).
+LISTA_TMUX=$(cat <<'REMOTO'
+tmux -L default ls -F '#{session_name}' 2>/dev/null | while IFS= read -r s; do
+  info=$(tmux -L default display -p -t "=$s:" '#{session_last_attached}|#{session_attached}|#{session_name}|#{pane_current_command}')
+  cmd=${info##*|}
+  pe=$(tmux -L default capture-pane -p -J -t "=$s:" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -n 12)
+  pid=$(tmux -L default display -p -t "=$s:" '#{pane_pid}')
+  # Gemini CLI (27/10/2026): o comando do painel é node; o filho do shell diz. A coluna IA vira Gemini.
+  if [[ $cmd == gemini ]] || pgrep -f -P "$pid" gemini >/dev/null 2>&1; then
+    info=${info%|*}'|gemini'
+    if grep -qE 'Allow execution|Waiting for user confirmation|Do you want to' <<< "$pe"; then st='✋ esperando você'
+    elif grep -qi 'esc to cancel' <<< "$pe"; then st='✦ trabalhando'
+    else st='💤 pronto'; fi
+  elif [[ $cmd == *claude* ]] || grep -qE '⏵⏵|\? for shortcuts|shift\+tab to cycle' <<< "$pe"; then
+    if grep -qE 'Do you want to|Esc to cancel|Enter to select|❯ *1\. ' <<< "$pe"; then st='✋ esperando você'
+    elif grep -qi 'esc to interrupt' <<< "$pe"; then st='🤖 trabalhando'
+    else st='💤 pronto'; fi
+  elif [[ $s == sh-* && $(id -un) == "$1" && ! -f $HOME/.cache/omega-sh/$s.rc ]]; then
+    # Sessão do rodador do omega (bash … | tee) na conta dona dos ~/sh ($1): sem .rc o ~/sh ainda
+    # está rodando, mesmo que o comando do painel seja "bash".
+    st='⚙️  rodando (~/sh)'
+  else
+    case $cmd in zsh|bash|sh|-zsh|-bash) st='⌨️  livre' ;; *) st='⚙️  rodando' ;; esac
+  fi
+  echo "$info|$st"
+done
+REMOTO
+)
+
+TERMINAIS=()   # conta|nome|cmd|situação|anexados
+# Blocos do menu de sessões: 1 = este servidor, 2… = os remotos, na ordem de REMOTOS.
+BLOCOS=("$HOST_CURTO")
+for _r in "${REMOTOS[@]}"; do BLOCOS+=("${R_HOST[$_r]}"); done; unset _r
+sh_bloco_titulo() { printf '\e[36m── %s\e[0m\n' "${BLOCOS[$1 - 1]}"; }
+bloco_vazio() {
+  local r=''
+  sh_bloco_titulo "$1"
+  (( $1 > 1 )) && r=${REMOTOS[$1 - 2]}
+  if [[ -n $r && ${R_ESTADO[$r]:-} == *✗* ]]; then printf '    \e[31msem resposta do ssh\e[0m\n'
+  else echo "    (nenhuma sessão aberta)"; fi
+}
+terminais_lista() {
+  local c l agora n=0 ult att nome cmd st d quando ia saida erro srv todas='' avisos='' dono rc g k gatual=0
+  TERMINAIS=()
+  agora=$(date +%s)
+  for c in "${CONTAS[@]}" "${REMOTOS[@]}"; do
+    erro=$(mktemp); rc=0
+    remoto "$c" && dono=${R_DONO[$c]} || dono=$DONO_SH
+    saida=$(como "$c" env -u TMUX bash -c "$LISTA_TMUX" _ "$dono" 2>"$erro" </dev/null) || rc=$?
+    if remoto "$c"; then
+      # 255 = o ssh não conectou (fora do ar, Mac dormindo, sem Tailscale): aparece no cabeçalho.
+      (( rc == 255 )) && R_ESTADO[$c]='\e[31m✗\e[0m' || R_ESTADO[$c]='\e[32m✓\e[0m'
+    # sudo que falhou (senha errada, sem permissão) aparece, em vez de virar "nenhuma sessão"
+    elif [[ -s $erro ]] && grep -qiE 'sudo:|Sorry, try again|incorrect password|not in the sudoers|is not allowed|password is required|senha' "$erro"; then
+      avisos+=$(printf '\e[31m    %s: %s\e[0m' "$c" "$(grep -v '^\s*$' "$erro" | tail -n1)")$'\n'
+    fi
+    rm -f "$erro"
+    # g = bloco: 1 este servidor, 2… os remotos (um bloco por servidor, cada um do mais recente ao
+    # mais antigo)
+    g=1; for k in "${!REMOTOS[@]}"; do [[ ${REMOTOS[k]} == "$c" ]] && g=$((k + 2)); done
+    [[ -n $saida ]] && todas+=$(sed "s/^/$g|$c|/" <<< "$saida")$'\n'
+  done
+  printf '\e[32m%s ✓\e[0m' "$HOST_CURTO"
+  for c in "${REMOTOS[@]}"; do printf ' · %s %b' "${R_HOST[$c]}" "${R_ESTADO[$c]:-?}"; done
+  printf '\n\n'
+  [[ -n $avisos ]] && printf '%s' "$avisos"
+  # Nº e Ú têm 2 bytes: o printf do bash conta bytes, então essas colunas levam +1.
+  printf '\e[1m%-4s %-22s %-20s %-10s %-12s %s\e[0m\n' Nº SERVIDOR NOME IA 'ÚLTIMO USO' SITUAÇÃO
+  # Mais recente primeiro (como no omega do Mac): ordena pelo último attach.
+  while IFS= read -r l; do
+    [[ -n $l ]] || continue
+    IFS='|' read -r g c ult att nome cmd st <<< "$l"
+    nome_ok "$nome" || continue
+    while (( g != gatual )); do
+      (( ++gatual < g )) && { bloco_vazio "$gatual"; continue; }
+      sh_bloco_titulo "$g"
+    done
+    d=$((agora - ${ult:-0}))
+    if (( ${ult:-0} == 0 )); then quando=nunca
+    elif (( d < 60 )); then quando=agora
+    elif (( d < 3600 )); then quando="há $((d / 60)) min"
+    elif (( d < 86400 )); then quando="há $((d / 3600)) h"
+    else quando="há $((d / 86400)) d"; fi
+    if [[ $cmd == gemini ]]; then ia=Gemini
+    else case $st in *pronto*|*trabalhando*|*esperando*) ia=Claude ;; *) ia=$cmd ;; esac; fi
+    TERMINAIS+=("$c|$nome|$ia|$st|${att:-0}")
+    (( ${att:-0} > 0 )) && st="$st · ● conectado"
+    srv=$(servidor_de "$c"); [[ $c == "$DONO_SH" ]] || remoto "$c" || srv="$srv ($c)"
+    # "há" tem 2 bytes: completa pelo número de caracteres, não pelo %-11s (que conta bytes).
+    printf '%-3s %-22s %-20s %-10s %s%*s %s\n' $((++n)) "$srv" "$nome" "$ia" "$quando" $((11 - ${#quando})) '' "$st"
+  done < <(printf '%s' "$todas" | sort -t'|' -k1,1n -k3,3nr)
+  # Bloco sem nenhuma sessão também aparece (servidor fora do ar diz isso, em vez de sumir).
+  while (( ++gatual <= ${#BLOCOS[@]} )); do bloco_vazio "$gatual"; done
+}
+
+# Entra numa sessão. Dentro do tmux do CloudShell é um tmux dentro do outro: o prefixo do de
+# dentro é Ctrl-b Ctrl-b (Ctrl-b Ctrl-b d sai dele e volta ao omega).
+entrar() {
+  local c=$1 s=$2
+  nome_ok "$s" || { echo "nome recusado"; pausa; return; }
+  propria "$c" "$s" && { echo "Esta é a sessão onde o omega está rodando."; pausa; return; }
+  echo "Entrando em $s ($c em $(servidor_de "$c")). Para sair sem fechar: Ctrl-b Ctrl-b d"
+  sleep 1
+  tm "$c" -u attach -t "=$s"
+}
+
+# Tecla n, como no omega do Mac: escolhe o servidor (awlsrv, srv2, mac) e se abre com
+# o Claude, o Gemini ou só o terminal; sugere um nome livre (claude, claude-2… / gemini… / term, term-2…). No CloudShell
+# a sessão abre numa aba nova com o nome dela.
+nova_sessao() {
+  local srv c tipo prog nome sug base k=1 i
+  echo
+  local -a bt=()
+  for i in "${!BLOCOS[@]}"; do printf '  %s) %s\n' $((i + 1)) "${BLOCOS[i]}"; bt+=("|🖥️|${BLOCOS[i]}||$((i + 1))⏎"); done
+  botoes nova-servidor "Nova sessão · servidor" "${bt[@]}"
+  read -rp "Servidor da nova sessão (Enter = 1): " srv || return
+  srv=${srv:-1}
+  [[ $srv =~ ^[0-9]+$ ]] && (( srv >= 1 && srv <= ${#BLOCOS[@]} )) || { MENU_MSG="Servidor inválido: '$srv'"; return; }
+  if (( srv == 1 )); then c=$DONO_SH; else c=${REMOTOS[srv - 2]}; fi
+  printf '\n  1) Claude\n  2) só o terminal\n  3) Gemini\n'
+  botoes nova-tipo "Nova sessão em $(servidor_de "$c") · abrir com" "|claude|Claude||1⏎" "|⌨️|Só o terminal||2⏎" "|gemini|Gemini||3⏎"
+  read -rp "Abrir com (Enter = 1): " tipo || return
+  case ${tipo:-1} in 1) prog=claude ;; 2) prog= ;; 3) prog=gemini ;; *) MENU_MSG="Opção inválida: '$tipo'"; return ;; esac
+  base=${prog:-term}; sug=$base
+  while tm "$c" has-session -t "=$sug" </dev/null 2>/dev/null; do sug="$base-$((++k))"; done
+  # Campo ✎ (27/10/2026, pedido do dono): o painel do ⌥ Tab só tinha o botão do nome sugerido e não pedia o nome.
+  botoes nova-nome "Nova sessão em $(servidor_de "$c") · digite o nome (Enter = $sug)" "|✎|$sug|letras, números, - e _|✎" "|✅|$sug|nome sugerido|⏎"
+  read -rp "Nome da sessão nova em $(servidor_de "$c") (Enter = $sug): " nome || return
+  botoes_some
+  nome=${nome:-$sug}
+  [[ $nome =~ ^[A-Za-z0-9_-]+$ ]] || { MENU_MSG="Nome inválido: '$nome' (letras, números, - e _)."; return; }
+  if tm "$c" has-session -t "=$nome" </dev/null 2>/dev/null; then
+    MENU_MSG="Já existe '$nome' em $(servidor_de "$c"): escolha ela na lista."; return
+  fi
+  # Claude roda como o dono do ~/sh no awlsrv (é dele o login, a memória e as regras de usuário).
+  local -a cmd=()
+  [[ -n $prog ]] && cmd=("zsh -lic $prog; exec zsh -l")
+  tm "$c" new-session -d -s "$nome" -c "$(casa "$c")" "${cmd[@]}" </dev/null \
+    || { MENU_MSG="✗ não abri a sessão $nome em $(servidor_de "$c")"; return; }
+  terminal_abre_aba "$c" "$nome" || entrar "$c" "$nome"
+}
+
+# Encerra (tecla d), como no omega do Mac: Claude recebe Esc (cancela o que estiver fazendo),
+# Ctrl-C (apaga rascunho na caixa) e /quit (não /exit: ~/.claude/commands/exit.md troca o /exit
+# nativo por um prompt) — no awlsrv a saída dispara a Regra 7. Terminal comum (inclusive um
+# ~/sh rodando) é fechado com kill-session, nunca com teclas no stdin dele.
+encerrar() {
+  local c=$1 s=$2 ia=$3 st=$4 att=$5 ok i cmd
+  nome_ok "$s" || return
+  propria "$c" "$s" && { echo "Esta é a sessão onde o omega está rodando."; pausa; return; }
+  echo
+  echo "  Sessão: $s ($c em $(servidor_de "$c")) — $ia — $st"
+  [[ $st == *trabalhando* ]] && printf '\e[33m  ⚠️  O Claude está TRABALHANDO nela: será interrompido (Esc) antes de sair.\e[0m\n'
+  if [[ $st == *'(~/sh)'* ]]; then
+    printf '\e[33m  ⚠️  Tem um ~/sh RODANDO nela: o script morre no meio, sai como FALHOU no histórico e FICA em ~/sh.\e[0m\n'
+  elif [[ $st == *rodando* ]]; then
+    printf '\e[33m  ⚠️  Tem um programa RODANDO nela: ele morre junto (kill-session).\e[0m\n'
+  fi
+  (( att > 0 )) && printf '\e[33m  ⚠️  Tem alguém CONECTADO nela agora: a tela dessa pessoa fecha.\e[0m\n'
+  if [[ $ia == Claude ]]; then
+    echo "  O Claude sai (/quit) e o awlsrv salva o que ficou: SEC, commit + push, docs para o Conselho e aviso (Ômega Regra 7)."
+  else
+    echo "  A sessão é fechada (kill-session)."
+  fi
+  botoes fechar "Fechar $s?" "|✅|Sim, fechar|$ia em $(servidor_de "$c")|s⏎" "|↩️|Não||⏎"
+  read -rp "Fechar mesmo? Digite s para confirmar: " ok || return
+  botoes_some
+  [[ $ok == [sS] ]] || return
+  if [[ $ia != Claude ]]; then
+    tm "$c" kill-session -t "=$s" && echo "✓ $s fechada" || echo "✗ não consegui fechar $s"
+    pausa; return
+  fi
+  echo "  Mandando /quit para $s e esperando sair (até 30 s)..."
+  # UMA chamada como a conta (um sudo só, como o fechar.sh do omega do Mac): sudo recusado ou
+  # expirado no meio não pode virar "a sessão sumiu = fechada".
+  local erro fechou
+  erro=$(mktemp)
+  fechou=$(como "$c" env -u TMUX bash -s -- "$s" 2>"$erro" <<'FECHAR'
+s=$1; t=(tmux -L default)
+"${t[@]}" has-session -t "=$s" 2>/dev/null || { echo SUMIU; exit 0; }
+"${t[@]}" send-keys -t "=$s:" Escape; sleep 0.4
+"${t[@]}" send-keys -t "=$s:" C-c; sleep 0.3
+"${t[@]}" send-keys -t "=$s:" -l /quit; sleep 0.4
+"${t[@]}" send-keys -t "=$s:" Enter
+for i in $(seq 1 120); do
+  sleep 0.25
+  "${t[@]}" has-session -t "=$s" 2>/dev/null || { echo SAIU; exit 0; }
+  case $("${t[@]}" display -p -t "=$s:" '#{pane_current_command}' 2>/dev/null) in
+    zsh|bash|sh|-zsh|-bash) "${t[@]}" kill-session -t "=$s" 2>/dev/null; echo SAIU-SHELL; exit 0 ;;
+  esac
+done
+"${t[@]}" kill-session -t "=$s" 2>/dev/null && echo FORCADO || echo FALHOU
+FECHAR
+) || fechou=FALHOU
+  case ${fechou##*$'\n'} in
+    SAIU|SAIU-SHELL) remoto "$c" && echo "✓ $s fechada" \
+                       || echo "✓ $s fechada (no awlsrv a Regra 7 salva o que ficou e avisa no @moabinho_bot)" ;;
+    SUMIU) echo "✓ $s já não existia" ;;
+    FORCADO) echo "⚠️  o Claude não saiu em 30 s: sessão morta à força (sem a Regra 7)" ;;
+    *) printf '\e[31m✗ não consegui encerrar %s%s\e[0m\n' "$s" "$([[ -s $erro ]] && printf ': %s' "$(grep -v '^\s*$' "$erro" | tail -n1)")" ;;
+  esac
+  rm -f "$erro"
+  pausa
+}
+
+# ---------------------------------------------------------------- ~/sh
+# nome|mtime|M(manter)|deps — o mesmo formato do omega do Mac; SERVICO|nome para os de serviço.
+LISTA_SH=$(cat <<'REMOTO'
+cd "$HOME/sh" 2>/dev/null || exit 0
+for f in *.sh; do
+  [ -e "$f" ] || continue
+  head -n 20 "$f" | grep -q '^# omega: servico' && { printf 'SERVICO|%s\n' "$f"; continue; }
+  mod=$(stat -c %Y "$f" 2>/dev/null || echo 0)
+  head -n 20 "$f" | grep -q '^# omega: manter' && k=M || k=
+  dep=$(head -n 20 "$f" | sed -n 's/^# omega: depois[: ]*//p' | tr -s ' ,' ',' | sed 's/^,//; s/,$//' | paste -sd, -)
+  printf '%s|%s|%s|%s\n' "$f" "$mod" "$k" "$dep"
+done
+REMOTO
+)
+
+SCRIPTS=() FIXOS=()   # FIXOS = manter + servico: nunca são arquivados, contam como cumpridos
+SH_ERRO=
+SH_OCULTOS=0
+SCRIPTS_BF=()   # ~/sh do bf: numerados depois dos do awlsrv
+# Imprime um bloco de servidor; o nº continua de $1. Saída do bloco: linhas a|mod|k|dep em $BLOCO.
+sh_bloco() {
+  local n=$1 bruto=$2 l a mod k dep ocultos
+  # Primeiro os que faltam rodar, depois a divisão dos reutilizáveis (# omega: manter, ficam na
+  # lista); cada grupo do mais recente ao mais antigo. A ordem de BLOCO é a da numeração.
+  mapfile -t BLOCO < <(grep -v '^SERVICO|' <<< "$bruto" | grep -v '^$' \
+                       | awk -F'|' '{ print ($3 == "M" ? 1 : 0) "|" $0 }' | sort -t'|' -k1,1n -k3,3nr | cut -d'|' -f2-)
+  ocultos=$(grep -c '^SERVICO|' <<< "$bruto" || true)
+  local titulo=0 pend=0
+  for l in "${BLOCO[@]}"; do
+    IFS='|' read -r a mod k dep <<< "$l"
+    if [[ $k == M ]] && (( ! titulo )); then
+      (( pend )) || printf '    \e[2mnada para rodar\e[0m\n'
+      printf '    \e[35m↻ reutilizáveis\e[0m \e[2m(ficam na lista)\e[0m\n'; titulo=1
+    fi
+    [[ $k == M ]] || pend=1
+    printf '%-3s %s' $((++n)) "$a"
+    [[ -n $dep ]] && printf '  \e[2m← depois de %s\e[0m' "${dep//,/, }"
+    echo
+  done
+  (( ${#BLOCO[@]} )) || printf '    \e[2mnada para rodar\e[0m\n'
+  (( ocultos > 0 )) && printf '    \e[2m(%s de serviço oculto%s)\e[0m\n' "$ocultos" "$( (( ocultos > 1 )) && echo s)"
+  return 0
+}
+sh_lista() {
+  local bruto erro rc=0 bf rcbf=0
+  SH_ERRO=
+  erro=$(mktemp)
+  bruto=$(como "$DONO_SH" bash -c "$LISTA_SH" 2>"$erro" </dev/null) || rc=$?
+  printf '\e[1m%-4s %s\e[0m\n' Nº SCRIPT
+  [[ -n ${SH_MSG:-} ]] && printf '\e[33m%s\e[0m\n' "$SH_MSG"
+  printf '\e[36m── %s\e[0m\n' "$HOST_CURTO"
+  if (( rc )); then
+    # sudo recusado/bloqueado: dizer isso, e não "nada para rodar"
+    SH_ERRO="não consegui ler o ~/sh do $DONO_SH (saída $rc): $(grep -v '^\s*$' "$erro" | tail -n1)"
+    rm -f "$erro"; SCRIPTS=() FIXOS=() SCRIPTS_BF=()
+    printf '    \e[31m✗ %s\e[0m\n' "$SH_ERRO"; return 1
+  fi
+  rm -f "$erro"
+  sh_bloco 0 "$bruto"; SCRIPTS=("${BLOCO[@]}")
+  mapfile -t FIXOS < <({ grep '^SERVICO|' <<< "$bruto" | cut -d'|' -f2
+                         printf '%s\n' "${SCRIPTS[@]}" | awk -F'|' '$3 == "M" { print $1 }'; } | grep -v '^$')
+  printf '\e[36m── %s\e[0m\n' "$BF"
+  SCRIPTS_BF=()
+  bf=$(como bf bash -c "$LISTA_SH" 2>/dev/null </dev/null) || rcbf=$?
+  (( rcbf )) && SH_BF_ESTADO='sem resposta do ssh' || SH_BF_ESTADO='no ar'
+  if (( rcbf )); then printf '    \e[31msem resposta do ssh\e[0m\n'
+  else sh_bloco ${#SCRIPTS[@]} "$bf"; SCRIPTS_BF=("${BLOCO[@]}"); fi
+  return 0
+}
+# Escolha nº → "conta|script.sh" (awlsrv primeiro, depois o bf), ou nada se inválido.
+sh_escolha() {
+  local i na=${#SCRIPTS[@]}
+  i=$(indice "$1" $(( na + ${#SCRIPTS_BF[@]} ))) && [[ -n $i ]] || return 1
+  if (( i < na )); then echo "$DONO_SH|${SCRIPTS[i]}"; else echo "bf|${SCRIPTS_BF[i - na]}"; fi
+}
+
+arquivado() {  # $1 = script.sh já validado por nome_ok: rodou OK (está em ~/sh/arquivados com data)?
+  local b=${1%.sh}
+  nome_ok "$b" || return 1
+  como "$DONO_SH" bash -c 'compgen -G "$HOME/sh/arquivados/$1-[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].sh" >/dev/null' _ "$b"
+}
+
+# Roda UM script na sessão tmux sh-<script> do dono do ~/sh, com o rodador do omega do Mac, e
+# anexa até ela fechar. Deixa FIM (ok|falhou|rodando) e RC.
+FIM= RC=
+# Rodador dos ~/sh (o mesmo do omega do Mac): instalado na conta $1 se faltar (o bf nunca teve).
+# Pasta 700 e arquivos 600: a saída de script com sudo não fica legível para outro usuário.
+RODAR_SH=$(cat <<'RODAR'
+#!/bin/bash
+# Rodador do omega do Mac (19/10/2026): $1 = sessão, $2 = script de ~/sh.
+umask 077
+d=$HOME/.cache/omega-sh; s=$1; a=$2
+rm -f "$d/$s.rc"
+# bash explícito: script sem +x roda igual (antes morria com 126 e log vazio).
+bash "$HOME/sh/$a" 2>&1 | tee "$d/$s.log"
+echo "${PIPESTATUS[0]}" > "$d/$s.rc"
+RODAR
+)
+rodador() {
+  como "$1" test -x "$(casa "$1")/.cache/omega-sh/rodar.sh" </dev/null && return 0
+  printf '%s\n' "$RODAR_SH" | como "$1" bash -c 'umask 077; mkdir -p ~/.cache/omega-sh && chmod 700 ~/.cache/omega-sh \
+    && cat > ~/.cache/omega-sh/rodar.sh.novo && chmod 700 ~/.cache/omega-sh/rodar.sh.novo \
+    && mv -f ~/.cache/omega-sh/rodar.sh.novo ~/.cache/omega-sh/rodar.sh'
+}
+sh_roda() {
+  local a=$1 u=${2:-$DONO_SH} sess casa_u
+  FIM=falhou RC=1
+  nome_ok "$a" || { printf '✗ nome recusado: %s\n' "$a"; return; }
+  casa_u=$(casa "$u")
+  sess="sh-${a%.sh}"; sess=${sess//[^A-Za-z0-9_-]/-}
+  rodador "$u" || { echo "✗ não consegui instalar o rodador em $(servidor_de "$u")"; return; }
+  echo; printf '\e[1m▶ ~/sh/%s (sessão %s do %s em %s)\e[0m\n' "$a" "$sess" "${u/#bf/$BF_DONO}" "$(servidor_de "$u")"
+  # Existe ou cria, numa chamada só e com resposta explícita: sudo recusado não pode passar por
+  # "não existe" (aí apagaria o .rc/.log de um ~/sh em execução).
+  local erro estado
+  erro=$(mktemp)
+  estado=$(como "$u" env -u TMUX bash -s -- "$sess" "$a" 2>"$erro" <<'ABRIR'
+s=$1; a=$2; t=(tmux -L default); d=$HOME/.cache/omega-sh
+if "${t[@]}" has-session -t "=$s" 2>/dev/null; then echo ABERTA; exit 0; fi
+rm -f "$d/$s.rc" "$d/$s.log"
+"${t[@]}" new-session -d -s "$s" -c "$HOME" "bash $d/rodar.sh '$s' '$a'" && echo CRIADA || echo FALHOU
+ABRIR
+) || estado=FALHOU
+  if [[ ${estado##*$'\n'} != @(ABERTA|CRIADA) ]]; then
+    printf '\e[31m✗ não abri a sessão %s%s\e[0m\n' "$sess" "$([[ -s $erro ]] && printf ': %s' "$(grep -v '^\s*$' "$erro" | tail -n1)")"
+    rm -f "$erro"; return
+  fi
+  rm -f "$erro"
+  tm "$u" -u attach -t "=$sess"
+  if tm "$u" has-session -t "=$sess" 2>/dev/null; then
+    printf '\e[33m⏳ %s continua rodando (sessão %s): escolha de novo para entrar.\e[0m\n' "$a" "$sess"
+    FIM=rodando RC=0; return
+  fi
+  erro=$(mktemp)
+  RC=$(como "$u" cat "$casa_u/.cache/omega-sh/$sess.rc" 2>"$erro" </dev/null | tail -n1)
+  [[ -s $erro ]] && printf '\e[31m  (ao ler o resultado: %s)\e[0m\n' "$(grep -v '^\s*$' "$erro" | tail -n1)"
+  rm -f "$erro"
+  if [[ $RC =~ ^[0-9]+$ ]] && (( RC == 0 )); then printf '\e[32m✓ ~/sh/%s terminou OK (saída 0).\e[0m\n' "$a"; FIM=ok
+  elif [[ $RC =~ ^[0-9]+$ ]]; then printf '\e[31m✗ ~/sh/%s saiu com código %s: fica em ~/sh para corrigir e rodar de novo.\e[0m\n' "$a" "$RC"
+  else printf '\e[31m✗ não sei como ~/sh/%s terminou (sem código).\e[0m\n' "$a"; RC=1; fi
+}
+
+# Automático (tecla t): todos menos os "manter", dependências (# omega: depois) primeiro, depois do
+# mais antigo ao mais novo. Falha não para a fila: quem depende dela é pulado. Dependência fora da
+# lista vale se for manter/servico (nunca arquivados) ou se estiver arquivada (rodou OK). Resumo no
+# fim (tela e @moabinho_bot), como no omega do Mac.
+sh_auto() {
+  local -a cand plano oks=() falhas=() pulados=() nomes
+  local -A ruim=()
+  local e a mod k dep d i pronto achou c n=0 corpo l ok grav sobra=0
+  local -a deps
+  mapfile -t cand < <(printf '%s\n' "${SCRIPTS[@]}" | awk -F'|' 'NF && $3 != "M"' | sort -t'|' -k2,2n)
+  (( ${#cand[@]} )) || { echo "nada para rodar"; pausa; return; }
+  plano=()
+  while (( ${#cand[@]} )); do
+    achou=0
+    for i in "${!cand[@]}"; do
+      IFS='|' read -r a mod k dep <<< "${cand[$i]}"
+      pronto=1
+      IFS=, read -ra deps <<< "$dep"
+      for d in "${deps[@]}"; do
+        for c in "${cand[@]}"; do [[ $c != "${cand[$i]}" && ${c%%|*} == "$d" ]] && pronto=0; done
+      done
+      if (( pronto )); then plano+=("${cand[$i]}"); unset 'cand[i]'; cand=("${cand[@]}"); achou=1; break; fi
+    done
+    (( achou )) || { echo "✗ dependência circular: ${cand[*]%%|*}"; pausa; return; }
+  done
+  mapfile -t nomes < <(printf '%s\n' "${plano[@]}" | cut -d'|' -f1)
+  echo; printf '\e[1m▶ Automático — nesta ordem:\e[0m\n'
+  for e in "${plano[@]}"; do IFS='|' read -r a mod k dep <<< "$e"; printf '  %d. %s%s\n' $((++n)) "$a" "${dep:+  ← depois de ${dep//,/, }}"; done
+  botoes auto "Automático · $n script(s) em ordem" "|▶️|Rodar|falha não para a fila|⏎" "|↩️|Cancelar||n⏎"
+  read -rp "Enter = rodar (falha não para a fila) · n = cancelar: " ok || return
+  botoes_some
+  [[ $ok == [nN] ]] && return
+  n=0
+  for e in "${plano[@]}"; do
+    IFS='|' read -r a mod k dep <<< "$e"; (( ++n ))
+    IFS=, read -ra deps <<< "$dep"
+    for d in "${deps[@]}"; do
+      if [[ $d == "$a" ]]; then
+        printf '\e[33m  (%d/%d) pulado: %s ← depende de si mesmo (# omega: depois %s)\e[0m\n' $n ${#plano[@]} "$a" "$d"
+        ruim[$a]=pulado; pulados+=("$a ← depende de si mesmo"); continue 2
+      fi
+      if ! nome_ok "$d"; then
+        printf '\e[33m  (%d/%d) pulado: %s ← dependência com nome recusado\e[0m\n' $n ${#plano[@]} "$a"
+        ruim[$a]=pulado; pulados+=("$a ← nome de dependência recusado"); continue 2
+      fi
+      if [[ -n ${ruim[$d]:-} ]]; then
+        printf '\e[33m  (%d/%d) pulado: %s ← %s %s\e[0m\n' $n ${#plano[@]} "$a" "$d" "${ruim[$d]}"
+        ruim[$a]=pulado; pulados+=("$a ← $d ${ruim[$d]}"); continue 2
+      fi
+      contem "$d" "${nomes[@]}" && continue
+      contem "$d" "${FIXOS[@]}" && continue
+      if ! arquivado "$d"; then
+        printf '\e[33m  (%d/%d) pulado: %s ← %s não está na lista nem em arquivados\e[0m\n' $n ${#plano[@]} "$a" "$d"
+        ruim[$a]=pulado; pulados+=("$a ← $d sumiu"); continue 2
+      fi
+    done
+    printf '\e[1m── (%d/%d) %s\e[0m\n' $n ${#plano[@]} "$a"
+    sh_roda "$a"
+    case $FIM in
+      ok) oks+=("$a") ;;
+      rodando) sobra=$(( ${#plano[@]} - n )); echo "⏸ pausado: $a ainda rodando — entre nele e tecle t de novo"; break ;;
+      *) ruim[$a]=falhou; falhas+=("$a (saída $RC)") ;;
+    esac
+  done
+  corpo="OK: ${#oks[@]}"$'\n'; for l in "${oks[@]}"; do corpo+="  ✓ $l"$'\n'; done
+  corpo+="Falharam: ${#falhas[@]}"$'\n'; for l in "${falhas[@]}"; do corpo+="  ✗ $l"$'\n'; done
+  corpo+="Pulados: ${#pulados[@]}"$'\n'; for l in "${pulados[@]}"; do corpo+="  ↷ $l"$'\n'; done
+  (( sobra )) && corpo+="⏸ Pausado: 1 ainda rodando, $sobra por rodar"$'\n'
+  echo; printf '\e[1m▶ Resumo do automático\e[0m\n%s' "$corpo"
+  grav=info; (( ${#falhas[@]} + ${#pulados[@]} + sobra )) && grav=aviso
+  printf '%s' "$corpo" | /usr/local/bin/awlnotify --categoria jobs --gravidade "$grav" \
+    "Automático do sh (CloudShell): ${#oks[@]} OK, ${#falhas[@]} falharam, ${#pulados[@]} pulado(s)$( (( sobra )) && printf ', %d por rodar' "$sobra")" >/dev/null \
+    || echo "(aviso do resumo não saiu)"
+  pausa
+}
+
+# $1 está entre os demais argumentos? Comparação literal em bash, sem pipe: printf | grep -q sob
+# pipefail pode morrer de SIGPIPE (141) com lista grande e dar "não está" para o que está.
+contem() { local x alvo=$1; shift; for x in "$@"; do [[ $x == "$alvo" ]] && return 0; done; return 1; }
+
+# Número digitado → índice (base 10: "08" não vira octal). Vazio se inválido.
+indice() { [[ $1 =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= $2 )) && echo $((10#$1 - 1)); }
+
+# Tecla k: grava a senha do sudo (24/10/2026, pedido do dono: omega e conselho "logados" no
+# CloudShell) em ~/.config/omega/sudo-senha (600) do usuário deste omega e do dono dos ~/sh — é a
+# mesma senha. Lida sem eco, conferida no sudo antes de gravar e passada só por stdin (nunca na
+# linha de comando). Quem usa: sudo_logado() daqui, o cabeçalho Ômega dos ~/sh e a janela
+# conselho do CloudShell. kx apaga as duas.
+SENHA_GRAVA='umask 077; mkdir -p "$HOME/.config/omega"; f=$HOME/.config/omega/sudo-senha; rm -f "$f.errada"; cat > "$f.novo" && chmod 600 "$f.novo" && mv -f "$f.novo" "$f"'
+sh_senha() {
+  local op=$1 senha u
+  if [[ $op == [xX] ]]; then
+    rm -f "$HOME/.config/omega/sudo-senha" "$HOME/.config/omega/sudo-senha.errada"
+    como "$DONO_SH" bash -c 'rm -f "$HOME/.config/omega/sudo-senha" "$HOME/.config/omega/sudo-senha.errada"'
+    SH_MSG="🔑 Senha do sudo apagada ($EU e $DONO_SH): o sudo volta a pedir na tela."; return
+  fi
+  for u in "$EU" "$DONO_SH"; do
+    if como "$u" test -f "/home/$u/.config/omega/sudo-senha"; then echo "  $u: senha gravada"; else echo "  $u: sem senha"; fi
+  done
+  IFS= read -rsp "Senha do sudo de $EU (a mesma do $DONO_SH; Enter = voltar): " senha; echo
+  [[ -n $senha ]] || return
+  if ! printf '%s\n' "$senha" | command sudo -S -k -p '' -v 2>/dev/null; then
+    unset senha; SH_MSG="✗ Senha errada: nada gravado."; return
+  fi
+  printf '%s\n' "$senha" | bash -c "$SENHA_GRAVA" \
+    && printf '%s\n' "$senha" | como "$DONO_SH" bash -c "$SENHA_GRAVA" \
+    && SH_MSG="🔑 Senha do sudo gravada ($EU e $DONO_SH): omega, conselho e ~/sh não perguntam mais." \
+    || SH_MSG="✗ Não consegui gravar a senha."
+  unset senha
+}
+
+# Tecla x: tira um ~/sh da lista (o mesmo do omega do Mac e do 🗑 do painel): só script já
+# executado e que não está rodando; vai para ~/sh/excluidos com linha EXCLUÍDO no histórico.
+EXCLUIR_SH=$(cat <<'REMOTO'
+arq=$1; b=${arq%.sh}; h=~/sh/historico.log
+[ -f ~/sh/"$arq" ] || { echo "✗ ~/sh/$arq não existe mais"; exit 1; }
+s="sh-$b"; s=${s//[^A-Za-z0-9_-]/-}
+if tmux -L default has-session -t "=$s" 2>/dev/null || pgrep -a -u "$(id -u)" bash | awk -v a="sh/$arq" \
+     '{for (i = 2; i <= NF; i++) if (length($i) >= length(a) && substr($i, length($i) - length(a) + 1) == a) f = 1} END {exit !f}'; then
+  echo "✗ $arq está rodando agora: espere terminar para excluir"; exit 1
+fi
+awk -v b="$b" '$3 == "OK" && $4 == b || $3 ~ /^FALHOU\(/ && $4 == b {achou=1} END {exit !achou}' "$h" 2>/dev/null \
+  || { echo "✗ $arq ainda não rodou nenhuma vez: só se exclui script já executado"; exit 1; }
+q=$(TZ=America/Sao_Paulo date '+%d/%m/%Y %H:%M:%S')
+d=~/sh/excluidos/$b-$(TZ=America/Sao_Paulo date '+%Y%m%d-%H%M%S').sh
+mkdir -p ~/sh/excluidos && mv ~/sh/"$arq" "$d" \
+  || { echo "✗ não consegui mover ~/sh/$arq para ~/sh/excluidos"; exit 1; }
+printf '%s  EXCLUÍDO   %-28s  pelo omega  → excluidos/%s\n' "$q" "$b" "${d##*/}" >> "$h" \
+  || { mv "$d" ~/sh/"$arq"; echo "✗ não consegui gravar o historico.log: ~/sh/$arq continua em ~/sh"; exit 1; }
+echo "🗑 ~/sh/$arq → ~/sh/excluidos/${d##*/}"
+REMOTO
+)
+sh_excluir() {
+  local num=$1 a mod k dep r e u
+  if [[ -z $num ]]; then
+    scripts_botoes excluir "🗑 Excluir qual script?" "|↩️|Voltar||⏎"
+    read -rp "Número do script a excluir (Enter = voltar): " num || return
+  fi
+  [[ -n $num ]] || return
+  e=$(sh_escolha "$num") || { SH_MSG="Opção inválida: 'x$num'"; return; }
+  u=${e%%|*}
+  IFS='|' read -r a mod k dep <<< "${e#*|}"
+  nome_ok "$a" || { SH_MSG="Nome recusado: '$a'"; return; }
+  botoes excluir-sim "Excluir ~/sh/$a?" "|🗑|Sim, excluir|$(servidor_de "$u")$([[ $k == M ]] && echo ' · reutilizável!')|s⏎" "|↩️|Não||⏎"
+  read -rp "Excluir ~/sh/$a em $(servidor_de "$u")$([[ $k == M ]] && echo ' (reutilizável!)')? (s/N) " r || return
+  botoes_some
+  [[ $r == [sS] ]] || { SH_MSG="Nada excluído."; return; }
+  SH_MSG=$(como "$u" env -u TMUX bash -c "$EXCLUIR_SH" _ "$a" 2>&1 </dev/null)
+}
+
+# Abas no CloudShell (24/10/2026, pedido do dono): nas janelas fixas dele (OMEGA_ABAS=1, dentro do
+# tmux do CloudShell) escolher um ~/sh ou um terminal abre uma aba nova com o nome dele; já aberta,
+# só vai para ela. Fora disso, tudo roda na própria tela, como antes.
+abas() { [[ ${OMEGA_ABAS:-} == 1 && -n ${TMUX:-} ]]; }
+
+# Botões no navegador (26/10/2026, pedido do dono: os menus em botões no visual do Cmd+Tab do Mac).
+# Só nas abas do CloudShell: /usr/local/lib/cloudshell/botoes.sh (fonte em apps/cloudshell/host do
+# astralwavelabel) manda o menu para os navegadores desta sessão, e o clique num botão só digita a
+# tecla do item — a mesma que se digitaria aqui. botoes <id> <título> "grupo|ícone|rótulo|detalhe|tecla"…
+BOTOES=/usr/local/lib/cloudshell/botoes.sh
+botoes_sessao() { tmux display -p -t "${TMUX_PANE:-}" '#{session_name}' 2>/dev/null; }
+botoes() {
+  abas && [[ -x $BOTOES ]] || return 0
+  "$BOTOES" sessao "${TMUX%%,*}" "$(botoes_sessao)" omega "$@" </dev/null >/dev/null 2>&1 || true
+}
+botoes_some() {
+  abas && [[ -x $BOTOES ]] || return 0
+  "$BOTOES" esconde "${TMUX%%,*}" "$(botoes_sessao)" </dev/null >/dev/null 2>&1 || true
+}
+# Um botão por sessão (TERMINAIS), em blocos por servidor; tecla = nº⏎. $1 id, $2 título, resto = mais botões.
+sessoes_botoes() {
+  local id=$1 titulo=$2 i c s ia st att srv ic; shift 2
+  local -a bt=()
+  for i in "${!TERMINAIS[@]}"; do
+    IFS='|' read -r c s ia st att <<< "${TERMINAIS[i]}"
+    srv=$(servidor_de "$c"); [[ $c == "$DONO_SH" ]] || remoto "$c" || srv="$srv ($c)"
+    # Logo do Claude ou do Gemini (27/10/2026, pedido do dono): a página troca o nome pelo SVG.
+    case $ia in Claude) ic=claude ;; Gemini) ic=gemini ;; *) ic=⌨️ ;; esac
+    (( ${att:-0} > 0 )) && st="$st · ● conectado"
+    bt+=("$srv|$ic|$s|$st|$((i + 1))⏎")
+  done
+  botoes "$id" "$titulo" "${bt[@]}" "$@"
+}
+tela_menu_botoes() {
+  # Um cabeçalho por servidor (27/10/2026, pedido do dono: a tela de Sessões do CloudShell, pwa/sessoes.js, mostra
+  # um bloco por servidor com o logo, mesmo sem sessão ou fora do ar). Ícone "servidor" e tecla "-": o painel
+  # do ⌥ Tab não desenha esses itens.
+  local i r est; local -a cab=()
+  for i in "${!BLOCOS[@]}"; do
+    est='no ar'
+    if (( i > 0 )); then r=${REMOTOS[i - 1]}; [[ ${R_ESTADO[$r]:-} == *✗* ]] && est='sem resposta do ssh'; fi
+    cab+=("${BLOCOS[i]}|servidor|${BLOCOS[i]}|$est|-")
+  done
+  sessoes_botoes menu "Ω omega · sessões" "ações|➕|Nova sessão||n⏎" "ações|📝|Renomear||r⏎" \
+    "ações|❌|Fechar|salva git e docs antes|d⏎" "ações|🔄|Atualizar||a⏎" "${cab[@]}"
+}
+# Um botão por ~/sh (SCRIPTS e SCRIPTS_BF, na numeração da lista); tecla = nº⏎.
+scripts_botoes() {
+  local id=$1 titulo=$2 l a mod k dep n=0 srv; shift 2
+  local -a bt=()
+  for l in "${SCRIPTS[@]}" "${SCRIPTS_BF[@]}"; do
+    IFS='|' read -r a mod k dep <<< "$l"
+    (( n < ${#SCRIPTS[@]} )) && srv=$HOST_CURTO || srv=$BF
+    if [[ $k == M ]]; then bt+=("$srv · ↻ reutilizáveis|♻️|${a%.sh}|$(sh_idade "$mod")|$((++n))⏎")
+    else bt+=("$srv|📜|${a%.sh}|${dep:+depois de ${dep//,/, }}${dep:-$(sh_idade "$mod")}|$((++n))⏎"); fi
+  done
+  botoes "$id" "$titulo" "${bt[@]}" "$@"
+}
+# "há 5 min", "há 2 h", "há 3 d" desde a última gravação do script (stat %Y).
+sh_idade() {
+  local d=$(( $(date +%s) - ${1:-0} ))
+  (( ${1:-0} > 0 )) || return 0
+  if (( d < 3600 )); then echo "há $(( d / 60 )) min"; elif (( d < 86400 )); then echo "há $(( d / 3600 )) h"; else echo "há $(( d / 86400 )) d"; fi
+}
+tela_sh_botoes() {
+  # Cabeçalho de cada servidor (27/10/2026, pedido do dono: a tela de Scripts do CloudShell, pwa/sessoes.js, no
+  # visual da de Sessões, um bloco por servidor com o logo). Ícone "servidor" e tecla "-": o painel não desenha.
+  scripts_botoes sh "🧾 sh · scripts" "ações|▶️|Automático|todos do $HOST_CURTO em ordem|t⏎" \
+    "ações|🔄|Atualizar||a⏎" "ações|🔑|Senha do sudo|kx = apagar|k⏎" "ações|🗑|Excluir||x⏎" \
+    "$HOST_CURTO|servidor|$HOST_CURTO|${SH_ERRO:+sem resposta}${SH_ERRO:-no ar}|-" \
+    "$BF|servidor|$BF|${SH_BF_ESTADO:-no ar}|-"
+}
+# abre_aba <nome> <comando>: 0 = abriu, 2 = já existia (foi para ela). O alvo é o id da janela:
+# um "." no nome viraria separador de painel num alvo por nome.
+abre_aba() {
+  local nome=$1 cmd=$2 id
+  id=$(aba_id "$nome")
+  if [[ -n $id ]]; then tmux select-window -t "$id"; return 2; fi
+  tmux new-window -n "$nome" -c "$HOME" "$cmd"
+}
+sh_abre_aba() {
+  local a=$1 u=${2:-$DONO_SH} nome rc=0
+  abas && nome_ok "$a" || return 1
+  # Aba sempre com o servidor na frente (26/10/2026, pedido do dono): bf-<script> e awlsrv-<script>.
+  nome=${a%.sh}; if remoto "$u"; then nome="$u-$nome"; else nome="$HOST_CURTO-$nome"; fi
+  abre_aba "$nome" "/usr/local/bin/omega rodar $a $u" || rc=$?
+  # Aba de ~/sh nasce verde (o @cor do botão ◐ cor do tmux.conf do CloudShell).
+  (( rc == 0 )) && tmux set -w -t "$(aba_id "$nome")" @cor "#69db7c"
+  case $rc in
+    0) SH_MSG="▶ $a aberto na aba $nome" ;;
+    2) SH_MSG="↪ $a já está aberto na aba $nome" ;;
+    *) return 1 ;;
+  esac
+}
+# Terminal escolhido no menu: aba com o servidor e o nome da sessão (aba_nome). Sair da sessão sem fechar (Ctrl-b Ctrl-b d) fecha só a aba.
+# Nome da aba de uma sessão: sempre com o servidor na frente (26/10/2026, pedido do dono), bf-<nome>
+# no bf e awlsrv-<nome> aqui — assim também nunca bate com as fixas conselho, omega e sh.
+aba_nome() {
+  local c=$1 s=$2
+  if remoto "$c"; then echo "$c-$s"
+  else echo "$HOST_CURTO-$s"; fi
+}
+# id da aba (janela do tmux do CloudShell) com esse nome, ou nada.
+aba_id() { tmux list-windows -F '#{window_id} #{window_name}' | awk -v n="$1" '$2 == n { print $1; exit }'; }
+# A aba de uma sessão guarda a conta e o id da sessão (@omega_conta, @omega_sid): o id ($N) não
+# muda quando a sessão é renomeada (aqui, no Mac ou no tmux), e o abas_sincroniza acerta o nome.
+sessao_id() { tm "$1" display -p -t "=$2:" '#{session_id}' </dev/null 2>/dev/null; }
+aba_da_sessao() {
+  tmux list-windows -F '#{window_id}|#{@omega_conta}|#{@omega_sid}' \
+    | awk -F'|' -v c="$1" -v s="$2" '$2 == c && $3 == s { print $1; exit }'
+}
+aba_marca() { tmux set -w -t "$1" @omega_conta "$2"; tmux set -w -t "$1" @omega_sid "$3"; }
+terminal_abre_aba() {
+  local c=$1 s=$2 nome sid w=''
+  abas && nome_ok "$s" && contem "$c" "${CONTAS[@]}" "${REMOTOS[@]}" || return 1
+  nome=$(aba_nome "$c" "$s")
+  sid=$(sessao_id "$c" "$s")
+  [[ -n $sid ]] && w=$(aba_da_sessao "$c" "$sid")
+  [[ -n $w ]] || w=$(aba_id "$nome")   # aba de antes do id: pelo nome
+  if [[ -n $w ]]; then
+    tmux select-window -t "$w"; MENU_MSG="↪ $s ($c) já está aberto na aba $nome"; return 0
+  fi
+  w=$(tmux new-window -P -F '#{window_id}' -n "$nome" -c "$HOME" "/usr/local/bin/omega entrar $c $s") || return 1
+  [[ -n $sid ]] && aba_marca "$w" "$c" "$sid"
+  MENU_MSG="▶ $s ($c) aberto na aba $nome"
+}
+# Acerta o nome das abas de sessão pelo nome atual da sessão (chamado a cada desenho do menu: a, 🔄
+# sozinho, r). Aba de antes do id ("omega entrar <conta> <sessão>" no comando de partida) ganha o id
+# se a sessão ainda tem o nome velho; se já foi renomeada, e a conta tem UMA só sessão com alguém
+# conectado que nenhuma outra aba marcou, é ela.
+abas_sincroniza() {
+  abas || return 0
+  local w c sid nome cmd s novo cand marcadas
+  while IFS='|' read -r w c sid nome cmd; do
+    if [[ -z $c ]]; then
+      [[ $cmd =~ omega\ entrar\ ([A-Za-z0-9_]+)\ ([A-Za-z0-9._-]+) ]] || continue
+      c=${BASH_REMATCH[1]} s=${BASH_REMATCH[2]}
+      contem "$c" "${CONTAS[@]}" "${REMOTOS[@]}" || continue
+      sid=$(sessao_id "$c" "$s")
+      if [[ -z $sid ]]; then
+        marcadas=$(tmux list-windows -F '#{@omega_conta}|#{@omega_sid}' | awk -F'|' -v c="$c" '$1 == c { print $2 }')
+        cand=$(tm "$c" list-sessions -F '#{session_id} #{session_attached}' </dev/null 2>/dev/null \
+          | awk '$2 > 0 { print $1 }' | grep -vxF -f <(printf '%s\n' "$marcadas" | grep .) 2>/dev/null || true)
+        [[ $(grep -c . <<< "$cand") == 1 ]] && sid=$cand
+      fi
+      [[ -n $sid ]] || continue
+      aba_marca "$w" "$c" "$sid"
+    fi
+    novo=$(tm "$c" display -p -t "$sid" '#{session_name}' </dev/null 2>/dev/null) || continue
+    nome_ok "$novo" || continue
+    novo=$(aba_nome "$c" "$novo")
+    [[ $novo == "$nome" ]] || tmux rename-window -t "$w" "$novo"
+  done < <(tmux list-windows -F '#{window_id}|#{@omega_conta}|#{@omega_sid}|#{window_name}|#{pane_start_command}')
+}
+
+# Menu dos ~/sh no visual do omega do Mac (24/10/2026): bloco do servidor, ícones nas teclas,
+# painel ao vivo (ao_vivo), k = senha, x = excluir.
+tela_sh() {
+  sh_lista
+  echo
+  printf '\e[1mt\e[0m    ▶️  \e[1mAUTOMÁTICO\e[0m  roda todos os do %s em ordem (dependências primeiro; falha não para a fila, quem depende dela é pulado)\n' "$HOST_CURTO"
+  printf '\e[1ma\e[0m    🔄 ATUALIZAR   relê agora (a lista já se atualiza sozinha a cada %s s)\n' "$AO_VIVO"
+  printf '\e[1mk\e[0m    🔑 SUDO        grava a senha do sudo deste servidor (kx = apagar)\n'
+  printf '\e[1mx\e[0m    🗑  EXCLUIR     tira um script da lista (x5 = o nº 5; vai para ~/sh/excluidos, o histórico fica)\n'
+  # Abas fixas do CloudShell (26/10/2026, pedido do dono): não fecham, então sem o q.
+  if abas; then echo; else printf '\e[1mq\e[0m    ↩️  VOLTAR      menu principal (ou Enter)\n\n'; fi
+}
+menu_sh() {
+  local esc e u p_q=', q'
+  abas && p_q=
+  SH_MSG=
+  while true; do
+    ao_vivo tela_sh "Número do .sh para rodar, ou t, a, k, x${p_q}: " || return   # Ctrl-D: sai
+    esc=$ESC; SH_MSG=
+    esc=${esc// /}
+    case $esc in
+      q|Q|'') abas || return
+              [[ -n $esc ]] && SH_MSG="a aba sh é fixa: não fecha" ;;
+      a|A) ;;
+      t|T) sh_auto ;;
+      k|K) echo; sh_senha ;;
+      [kK][xX]) sh_senha x ;;
+      [xX]*) sh_excluir "${esc:1}" ;;
+      *) if e=$(sh_escolha "$esc"); then
+           u=${e%%|*}; e=${e#*|}
+           sh_abre_aba "${e%%|*}" "$u" && continue
+           sh_roda "${e%%|*}" "$u"; pausa "Enter = voltar à lista" || true; continue
+         fi
+         SH_MSG="Opção inválida: '$esc'" ;;
+    esac
+  done
+}
+
+# ---------------------------------------------------------------- menu principal
+# Tecla r: troca o nome de uma sessão (rename-session), como o r do omega do Mac.
+renomear() {
+  local c=$1 s=$2 novo
+  echo; echo "  Sessão: $s ($(servidor_de "$c"), usuário $c)"
+  botoes renomear "Renomear $s · digite o novo nome" "|↩️|Cancelar||⏎"
+  read -rp "Novo nome (Enter = cancelar): " novo || return
+  botoes_some
+  [[ -n $novo ]] || { MENU_MSG="Nada renomeado."; return; }
+  [[ $novo =~ ^[A-Za-z0-9_-]+$ ]] || { MENU_MSG="Nome inválido: '$novo' (letras, números, - e _)."; return; }
+  if tm "$c" has-session -t "=$novo" 2>/dev/null; then MENU_MSG="Já existe '$novo' em $c."; return; fi
+  # Antes: aba antiga ganha o id pelo nome velho. Depois: a aba troca de nome junto (o attach dela
+  # segue na sessão, que só mudou de nome).
+  abas_sincroniza
+  tm "$c" rename-session -t "=$s" "$novo" </dev/null || { MENU_MSG="✗ Não renomeei $s."; return; }
+  MENU_MSG="📝 $s → $novo"
+  abas_sincroniza
+}
+
+# Painel ao vivo (24/10/2026, pedido do dono: "não ficar esperando o a"): a cada AO_VIVO s a
+# tela é refeita num arquivo e só troca na tela se mudou alguma coisa (situação, nome, "há N min",
+# script que entrou ou saiu). A escolha é lida tecla a tecla, e o que já foi digitado volta depois
+# do redesenho. Aba do CloudShell que ninguém está vendo (sem navegador ligado, ou outra aba na
+# frente) não relê nada: cada volta é um sudo e um ssh para o bf e o Mac. $1 = função que desenha,
+# $2 = prompt. Enter deixa a linha em ESC; Ctrl-D ou EOF devolvem 1.
+AO_VIVO=3
+na_tela() {
+  [[ -n ${TMUX:-} && -n ${TMUX_PANE:-} ]] || return 0
+  [[ $(tmux display -p -t "$TMUX_PANE" '#{&&:#{session_attached},#{window_active}}' 2>/dev/null) != 0 ]]
+}
+ao_vivo() {
+  local desenha=$1 prompt=$2 tela novo ch buf='' prazo rc
+  tela=$(mktemp); novo=$(mktemp)
+  ESC=
+  while :; do
+    # no shell atual: TERMINAIS/SCRIPTS valem para a escolha
+    if na_tela && "$desenha" >"$novo" 2>&1 && ! cmp -s "$novo" "$tela"; then
+      limpa; cat "$novo"; printf '%s%s' "$prompt" "$buf"; cp "$novo" "$tela"
+    fi
+    # Botões no navegador a cada volta (a aba que volta para a frente ganha os dela de novo; a página
+    # só redesenha se mudou alguma coisa).
+    declare -F "${desenha}_botoes" >/dev/null && na_tela && "${desenha}_botoes"
+    prazo=$((SECONDS + AO_VIVO))
+    while (( SECONDS < prazo )); do
+      IFS= read -rsn1 -t 1 ch; rc=$?
+      # A cada segundo sem tecla, os botões de novo (27/10/2026, pedido do dono: "não está em tempo real"):
+      # voltar para esta aba ou recarregar a página tira o menu do navegador, e esperar a volta de 3 s
+      # deixava o ⌥ Tab sem ele. A página ignora o que chegar igual.
+      if (( rc > 128 )); then declare -F "${desenha}_botoes" >/dev/null && na_tela && "${desenha}_botoes"; continue
+      elif (( rc )); then echo; rm -f "$tela" "$novo"; botoes_some; return 1; fi
+      case $ch in
+        '') echo; rm -f "$tela" "$novo"; ESC=$buf; botoes_some; return 0 ;;
+        $'\x7f'|$'\b') [[ -n $buf ]] && { buf=${buf%?}; printf '\b \b'; } ;;
+        $'\x04') [[ -n $buf ]] || { echo; rm -f "$tela" "$novo"; botoes_some; return 1; } ;;
+        $'\e') read -rsn5 -t 0.05 _ || true ;;   # seta e afins: descarta a sequência
+        [[:print:]]) buf+=$ch; printf '%s' "$ch" ;;
+      esac
+    done
+  done
+}
+
+# Tela inicial no visual do omega do Mac (24/10/2026): servidor no topo, colunas, ícones nas teclas,
+# Enter = 1. Este servidor, o srv2 e o Mac, um bloco cada. Painel ao vivo (ao_vivo): a
+# cada volta também acerta o nome das abas (sessão renomeada em outro lugar).
+tela_menu() {
+  abas_sincroniza
+  terminais_lista
+  echo
+  [[ -n $MENU_MSG ]] && printf '\e[33m%s\e[0m\n\n' "$MENU_MSG"
+  printf '\e[1mn\e[0m    ➕ NOVA       abre uma sessão nova (escolhe servidor, Claude, Gemini ou só o terminal, e nome)\n'
+  printf '\e[1mr\e[0m    📝 RENOMEAR   troca o nome de uma sessão (r1 = renomeia a 1)\n'
+  printf '\e[1md\e[0m    ❌ FECHAR     encerra uma sessão (d1 = fecha a 1; salva git e docs antes)\n'
+  # No CloudShell a lista dos ~/sh já é a aba fixa sh (26/10/2026, pedido do dono): sem o botão aqui.
+  abas || printf '\e[1msh\e[0m   🧾 SH         roda um script .sh deste servidor\n'
+  printf '\e[1ma\e[0m    🔄 ATUALIZAR  relê agora (a lista já se atualiza sozinha a cada %s s)\n' "$AO_VIVO"
+  if abas; then echo; else printf '\e[1mq\e[0m    🚪 SAIR\n\n'; fi
+}
+menu() {
+  local esc i c s ia st att
+  MENU_MSG=
+  local p_sh='sh, ' p_fim='a ou q'; abas && p_sh= p_fim=a
+  while true; do
+    ao_vivo tela_menu "Escolha: número da sessão, n, r, d, ${p_sh}${p_fim} (Enter = 1): " || return   # Ctrl-D: sai
+    esc=$ESC; MENU_MSG=
+    esc=${esc// /}
+    case $esc in
+      q|Q) abas || return; MENU_MSG="a aba omega é fixa: não fecha" ;;
+      a|A) ;;
+      n|N) nova_sessao ;;
+      # No CloudShell o sh digitado vai para a aba fixa sh.
+      s|S|sh|SH) if abas; then command tmux select-window -t ':=sh' 2>/dev/null || MENU_MSG="a aba sh não está aberta (reabra o CloudShell)"; else menu_sh; fi ;;
+      [rRdD]*)
+        local op=${esc:0:1} num=${esc:1}
+        if [[ -z $num ]]; then
+          sessoes_botoes sessao "$([[ $op == [rR] ]] && echo '📝 Renomear' || echo '❌ Fechar') qual sessão?" "|↩️|Voltar||⏎"
+          read -rp "Número da sessão: " num || continue
+          [[ -n $num ]] || continue
+        fi
+        i=$(indice "$num" ${#TERMINAIS[@]}) && [[ -n $i ]] || { MENU_MSG="Opção inválida: '$op$num'"; continue; }
+        IFS='|' read -r c s ia st att <<< "${TERMINAIS[i]}"
+        if [[ $op == [rR] ]]; then renomear "$c" "$s"; else encerrar "$c" "$s" "$ia" "$st" "$att"; fi ;;
+      *)
+        [[ -z $esc ]] && esc=1
+        i=$(indice "$esc" ${#TERMINAIS[@]}) && [[ -n $i ]] || { MENU_MSG="Opção inválida: '$esc'"; continue; }
+        IFS='|' read -r c s ia st att <<< "${TERMINAIS[i]}"
+        terminal_abre_aba "$c" "$s" || entrar "$c" "$s" ;;
+    esac
+  done
+}
+
+case ${1:-} in
+  sh|s) menu_sh ;;
+  # Roda um ~/sh nesta tela e espera o Enter (é o que a aba aberta pelo sh_abre_aba executa).
+  # Entra numa sessão tmux da conta (é o que a aba aberta pelo terminal_abre_aba executa).
+  entrar)
+    contem "${2:-}" "${CONTAS[@]}" "${REMOTOS[@]}" && nome_ok "${3:-}" || { echo "uso: omega entrar <conta|bf|mac> <sessão>" >&2; exit 2; }
+    # Na aba: se o attach falhar, o erro fica na tela até o Enter (senão a aba some na hora).
+    entrar "$2" "$3" || { echo; read -rp "Enter = fechar a aba " _ || true; } ;;
+  rodar)
+    nome_ok "${2:-}" && [[ ${3:-$DONO_SH} == @("$DONO_SH"|bf) ]] || { echo "uso: omega rodar <script.sh> [bf]" >&2; exit 2; }
+    sh_roda "$2" "${3:-$DONO_SH}"
+    # Na aba do CloudShell: OK fecha sozinha (3 s para ver o resultado); erro deixa a aba vermelha
+    # e espera o Enter; "continua rodando" (saiu com Ctrl-b d) fecha só a aba.
+    case $FIM in
+      ok) printf '\e[2m(a aba fecha em 3 s)\e[0m\n'; sleep 3 ;;
+      rodando) sleep 2 ;;
+      *) [[ -n ${TMUX_PANE:-} ]] && tmux set -w -t "$TMUX_PANE" @cor "#ff5c7a" 2>/dev/null
+         echo; read -rp "Enter = fechar a aba " _ || true ;;
+    esac ;;
+  # Nova sessão direto (27/10/2026, pedido do dono): é o que o "🖥️ Nova sessão…" do ☰ menu e do
+  # ☰ CloudShell abre numa aba própria — servidor, Claude ou terminal, nome, e a aba da sessão.
+  nova)
+    MENU_MSG=
+    nova_sessao
+    botoes_some
+    # Abriu a aba da sessão: esta fecha. Erro ou cancelado: a mensagem fica até o Enter.
+    if [[ $MENU_MSG != ▶* && $MENU_MSG != ↪* ]]; then
+      echo; [[ -n $MENU_MSG ]] && printf '\e[33m%s\e[0m\n' "$MENU_MSG"
+      read -rp "Enter = fechar a aba " _ || true
+    fi ;;
+  ''|menu) menu ;;
+  -h|--help|ajuda) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//' ;;
+  *) echo "uso: omega [sh|nova|rodar <script.sh>|entrar <conta> <sessão>|--help]" >&2; exit 2 ;;
+esac

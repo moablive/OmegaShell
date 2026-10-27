@@ -1,0 +1,4 @@
+**/node_modules
+**/dist
+pwa/icone.svg
+pwa/gerar-icones.sh

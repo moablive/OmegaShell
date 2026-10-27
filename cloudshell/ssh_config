@@ -1,0 +1,17 @@
+# awlsrv = host-gateway da awl_network (extra_hosts no docker-compose.yml).
+Host awlsrv
+    Port 3333
+    StrictHostKeyChecking yes
+    UserKnownHostsFile /home/shell/.ssh/known_hosts
+    ServerAliveInterval 30
+    ServerAliveCountMax 4
+    # Chave só do CloudShell (montada do host, /etc/awl/cloudshell), comando forçado no
+    # authorized_keys do awlsrv. Sem senha guardada em lugar nenhum.
+    IdentityFile /run/cloudshell/id_ed25519
+    IdentitiesOnly yes
+    IdentityAgent none
+    PreferredAuthentications publickey
+    # Sem ~C/~& do cliente ssh dentro do terminal (o restrict corta no servidor; aqui no cliente).
+    EscapeChar none
+    PasswordAuthentication no
+    KbdInteractiveAuthentication no

@@ -1,0 +1,28 @@
+#!/bin/bash
+# Processo de cada aba do ttyd: entra no awlsrv como awlsrv pela chave do CloudShell e
+# abre a sessão tmux da conta do hub. Sem pergunta de usuário: quem chegou aqui já
+# passou pelo LoginHUB (senha + 2FA). Na ponta do host a chave tem comando forçado
+# (apps/cloudshell/host/sessao.sh): só abre essa sessão, nada de túnel ou comando solto.
+set -u
+
+# $1 = id da conta no LoginHUB, posto pelo nginx na URL do WebSocket a partir do que o
+# gateway conferiu (a query do navegador é descartada).
+conta_hub=${1:-}
+if ! [[ $conta_hub =~ ^[0-9]{1,12}$ ]]; then
+  echo "$(date -Iseconds) cloudshell-login: recusado sem conta do hub" > /proc/1/fd/1 2>/dev/null || true
+  printf 'CloudShell: sessão sem conta do LoginHUB. Entre de novo.\n'
+  sleep 10
+  exit 1
+fi
+
+# Trilha no log do container.
+echo "$(date -Iseconds) cloudshell-login: conta_hub=${conta_hub} ssh awlsrv@awlsrv (tmux cs-${conta_hub})" > /proc/1/fd/1 2>/dev/null || true
+
+# -f e não -r: se o arquivo faltar no up, o docker cria um DIRETÓRIO no lugar (e -r passaria).
+if [ ! -f /run/cloudshell/id_ed25519 ]; then
+  printf '\033[1;31mCloudShell sem a chave do awlsrv.\033[0m Rode ~/sh/cloudshell-chave-awlsrv.sh no servidor.\n'
+  sleep 30
+  exit 1
+fi
+
+exec ssh -t awlsrv@awlsrv "$conta_hub"

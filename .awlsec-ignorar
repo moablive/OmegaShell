@@ -1,0 +1,6 @@
+# Riscos aceitos pelo dono (falsos positivos do scanner de segredos), um por linha, sempre com o motivo.
+# O integrity sha512 do npm casa com o padrão "Twilio API Key" (SK…).
+cloudshell/**/package-lock.json
+# Os logos dos servidores embutidos em base64 (data: URI, gerados por pwa/servidores/gerar-logos.sh) casam por
+# acaso com o mesmo padrão. É só imagem.
+cloudshell/pwa/logos.js

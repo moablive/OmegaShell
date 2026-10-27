@@ -1,0 +1,8 @@
+Logos dos servidores no CloudShell (telas de Sessões e Scripts, painel do ⌥ Tab; 27/10/2026).
+
+Um arquivo por servidor, com o nome dele em minúsculas: awlsrv.png, srv2.png, mac.svg…
+(.svg ou .png; fundo transparente — o espaço do logo é escuro). Depois de pôr ou trocar um arquivo:
+  1. rodar pwa/servidores/gerar-logos.sh (embute os logos em pwa/logos.js; a página usa esse primeiro)
+  2. commit e reconstruir o container astralwave_cloudshell
+Sem logo, a tela mostra o espaço tracejado com a inicial.
+Documentação: "Projeto - Astral Wave ／ CloudShell", pasta awldocs do Drive.
