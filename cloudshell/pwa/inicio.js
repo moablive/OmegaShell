@@ -5,7 +5,9 @@
 //
 // Camada por cima do terminal, como os botões do ⌥ Tab (botoes.js): o login (LoginHUB + 2FA) e o ttyd não
 // mudam. Abre ao carregar a página e pelo ⌂ no canto. Cada cartão só DIGITA no terminal a tecla que o
-// tmux.conf liga à janela (User4–User7: conselho, omega, sh, nova sessão); Continuar (ou Esc) só fecha.
+// tmux.conf liga à janela (User5–User6: omega, sh); Esc só fecha. Os cartões Conselho Ômega e
+// Continuar saíram em 28/10/2026 (pedido do dono). Desde então a janela conselho não aparece mais: Esc com ela
+// ativa vai para a omega (Sessões), e cair nela (fechar outra aba) abre esta página — nada de chat em texto.
 (function () {
   'use strict';
 
@@ -51,16 +53,15 @@
     '@media (prefers-reduced-motion:reduce){#csi.on{animation:none}}'
   ].join('');
 
-  // Cartões: rótulo, detalhe, ícone, o que digita no terminal (as teclas User4–User7 do tmux.conf; null = só fecha).
+  // Cartões: ícone, rótulo, detalhe, o que digita no terminal (as teclas User5–User6 do tmux.conf).
+  // O 🖥️ Nova sessão saiu em 28/10/2026 (pedido do dono: sessão nova só pela tela de Sessões, ➕ Nova sessão).
   var CARTOES = [
-    ['📜', 'Conselho Ômega', 'conversar com o conselheiro', '\x1b[95~'],
     ['Ω', 'Sessões', 'omega: Claude, Gemini, terminais', '\x1b[94~'],
-    ['🧾', 'Scripts ~/sh', 'o que falta rodar', '\x1b[93~'],
-    ['🖥️', 'Nova sessão', 'servidor, IA e nome', '\x1b[92~'],
-    ['⌨️', 'Continuar', 'voltar à aba de antes', null]
+    ['🧾', 'Scripts ~/sh', 'o que falta rodar', '\x1b[93~']
   ];
 
   var t, raiz, volta, cards = [], sel = 0, aberto = false;
+  var ativa = '';   // aba ativa do tmux (evento "aba" do botoes.sh esconde: na troca de aba e no attach)
 
   function digita(d) {
     if (!t) return;
@@ -95,7 +96,7 @@
     if (k === 'ArrowRight' || k === 'ArrowDown' || (k === 'Tab' && !e.shiftKey)) { sel = (sel + 1) % n; marca(); }
     else if (k === 'ArrowLeft' || k === 'ArrowUp' || k === 'Tab') { sel = (sel + n - 1) % n; marca(); }
     else if (k === 'Enter') escolhe(sel);
-    else if (k === 'Escape') fecha();
+    else if (k === 'Escape') { fecha(); if (ativa === 'conselho') digita('\x1b[94~'); }
     else if (/^[1-9]$/.test(k) && +k <= n) escolhe(+k - 1);
     // Com a página na frente nada vai para o terminal às cegas.
     e.preventDefault(); e.stopPropagation();
@@ -112,7 +113,8 @@
     var cs = document.createElement('div'); cs.className = 'cs'; w.appendChild(cs);
     CARTOES.forEach(function (c, n) {
       var b = document.createElement('button'); b.type = 'button'; b.tabIndex = -1; b.className = 'c';
-      [['e', c[0]], ['r', c[1]], ['d', c[2]], ['k', String(n + 1)]].forEach(function (p) {
+      // Sem o selo do número (28/10/2026, pedido do dono); as teclas 1–N continuam valendo.
+      [['e', c[0]], ['r', c[1]], ['d', c[2]]].forEach(function (p) {
         var s = document.createElement('span'); s.className = p[0]; s.textContent = p[1]; b.appendChild(s);
       });
       b.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
@@ -121,7 +123,7 @@
       cs.appendChild(b); cards.push(b);
     });
     var p = document.createElement('div'); p.className = 'p';
-    p.textContent = '1–5 ou ← → e ⏎ · esc continua · ⌥ Tab abre os menus · ⌂ no canto volta para cá';
+    p.textContent = '← → e ⏎ · esc volta ao terminal · ⌥ Tab abre os menus · ⌂ no canto volta para cá';
     w.appendChild(p);
     volta = document.createElement('button'); volta.id = 'csi-v'; volta.type = 'button'; volta.tabIndex = -1;
     volta.textContent = '⌂'; volta.title = 'Página inicial';
@@ -129,6 +131,12 @@
     volta.addEventListener('click', abre);
     document.body.appendChild(raiz); document.body.appendChild(volta);
     document.addEventListener('keydown', teclado, true);
+    window.addEventListener('cs-menu', function (ev) {
+      var m = ev.detail;
+      if (!m || m.tipo !== 'aba') return;
+      ativa = m.w || '';
+      if (ativa === 'conselho' && !aberto) abre();
+    });
     setInterval(function () { if (aberto) hora(); }, 30000);
     // Recarga automática (versão nova): volta direto ao terminal, sem a página inicial.
     var recarga = false;

@@ -6,7 +6,8 @@
 // repassado no evento "cs-menu"; id "menu" = sessões, "sh" = scripts) vira um bloco por servidor — logo, nome, no
 // ar ou não — com um cartão por sessão (grade) ou uma linha por ~/sh (lista, nome inteiro; os ↻ reutilizáveis
 // numa divisão à parte). Ao vivo: o omega reenvia a cada segundo e relê a cada 3 s. Como nos botões, o clique só
-// DIGITA a tecla do item (nº⏎, n⏎, r⏎…); o omega continua lendo do teclado. Esc mostra a lista em texto.
+// DIGITA a tecla do item (nº⏎, n⏎, r⏎…); o omega continua lendo do teclado. A lista em texto nunca aparece
+// (28/10/2026, pedido do dono): Esc abre a página inicial e o ⌥ Tab abre os botões por cima desta tela.
 //
 // Logo do servidor: /servidores/<nome>.svg ou .png (pwa/servidores/, nome em minúsculas: awlsrv,
 // srv2, mac). Sem arquivo, fica o espaço tracejado com a inicial.
@@ -79,7 +80,7 @@
   };
   var REUSO = / · ↻ reutilizáveis$/;
 
-  var t, raiz, w, menu = null, dispensado = false, sel = -1, buf = '', logos = {}, vis = [];
+  var t, raiz, w, menu = null, sel = -1, buf = '', logos = {}, vis = [];
 
   function digita(d) {
     if (!t) t = window.term;
@@ -220,10 +221,12 @@
   // Última tela de cada aba fixa: voltar para a omega ou a sh mostra ela na hora (o omega reenvia em até 1 s).
   var ultimo = {}, ABA = { omega: 'menu', sh: 'sh' };
   function recebe(m) {
-    if (!m) { menu = null; dispensado = false; sel = 0; some(); return; }   // saiu da aba (ou escolheu): começa de novo
+    if (!m) { menu = null; sel = 0; some(); return; }   // saiu da aba (ou escolheu): começa de novo
     if (m.tipo === 'aba') {                                        // troca de aba (botoes.sh esconde)
       var u = ultimo[ABA[m.w]];
-      if (!u || dispensado) { some(); return; }
+      if (!ABA[m.w]) { some(); return; }
+      // Sem tela guardada (página recém-aberta): "abrindo…" na frente até o omega mandar a dele (até 1 s).
+      if (!u) { clearTimeout(espera); raiz.classList.add('on', 'enviando'); return; }
       m = u;
     }
     if (m.tipo !== 'omega' || !MODO[m.id]) { some(); return; }   // outra pergunta do omega: fica com os botões
@@ -231,7 +234,6 @@
     ultimo[m.id] = m;
     if (!menu || menu.id !== m.id) sel = 0;                        // outra tela: começa no primeiro
     menu = m;
-    if (dispensado) return;
     var n = sessoes().length;
     if (sel >= n) sel = n - 1;
     if (sel < 0 && n) sel = 0;
@@ -245,10 +247,10 @@
     if (!raiz.classList.contains('on')) return;
     // Página inicial ou botões do ⌥ Tab por cima: as teclas são deles.
     if (document.querySelector('#csi.on, #csb.on')) return;
-    if (e.code === 'Tab' && e.altKey) { dispensado = true; some(); return; }   // ⌥ Tab: os botões do botoes.js
+    if (e.code === 'Tab' && e.altKey) return;   // ⌥ Tab: os botões do botoes.js abrem por cima desta tela
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var k = e.key, n = vis.length;
-    if (k === 'Escape') { if (buf) { buf = ''; mostraBuf(); } else { dispensado = true; some(); } }
+    if (k === 'Escape') { if (buf) { buf = ''; mostraBuf(); } else { var v = document.getElementById('csi-v'); if (v) v.click(); } }
     else if (/^[0-9]$/.test(k)) { if (buf.length < 3) buf += k; mostraBuf(); }
     else if (k === 'Backspace') { buf = buf.slice(0, -1); mostraBuf(); }
     else if (k === 'Enter') { if (buf) manda(buf + '⏎'); else if (vis[sel]) manda(vis[sel].k); }

@@ -118,8 +118,9 @@ tmux -L default ls -F '#{session_name}' 2>/dev/null | while IFS= read -r s; do
   cmd=${info##*|}
   pe=$(tmux -L default capture-pane -p -J -t "=$s:" 2>/dev/null | grep -v '^[[:space:]]*$' | tail -n 12)
   pid=$(tmux -L default display -p -t "=$s:" '#{pane_pid}')
-  # Gemini CLI (27/10/2026): o comando do painel é node; o filho do shell diz. A coluna IA vira Gemini.
-  if [[ $cmd == gemini ]] || pgrep -f -P "$pid" gemini >/dev/null 2>&1; then
+  # Gemini (27/10/2026): o Antigravity CLI (agy, desde 28/10/2026) ou o Gemini CLI antigo (comando node; o filho
+  # do shell diz). A coluna IA vira Gemini.
+  if [[ $cmd == gemini || $cmd == agy ]] || pgrep -x -P "$pid" agy >/dev/null 2>&1 || pgrep -f -P "$pid" gemini >/dev/null 2>&1; then
     info=${info%|*}'|gemini'
     if grep -qE 'Allow execution|Waiting for user confirmation|Do you want to' <<< "$pe"; then st='✋ esperando você'
     elif grep -qi 'esc to cancel' <<< "$pe"; then st='✦ trabalhando'
@@ -225,19 +226,25 @@ nova_sessao() {
   echo
   local -a bt=()
   for i in "${!BLOCOS[@]}"; do printf '  %s) %s\n' $((i + 1)) "${BLOCOS[i]}"; bt+=("|🖥️|${BLOCOS[i]}||$((i + 1))⏎"); done
-  botoes nova-servidor "Nova sessão · servidor" "${bt[@]}"
+  botoes_abre nova-servidor "Nova sessão · servidor" "${bt[@]}"
   read -rp "Servidor da nova sessão (Enter = 1): " srv || return
   srv=${srv:-1}
   [[ $srv =~ ^[0-9]+$ ]] && (( srv >= 1 && srv <= ${#BLOCOS[@]} )) || { MENU_MSG="Servidor inválido: '$srv'"; return; }
   if (( srv == 1 )); then c=$DONO_SH; else c=${REMOTOS[srv - 2]}; fi
-  printf '\n  1) Claude\n  2) só o terminal\n  3) Gemini\n'
-  botoes nova-tipo "Nova sessão em $(servidor_de "$c") · abrir com" "|claude|Claude||1⏎" "|⌨️|Só o terminal||2⏎" "|gemini|Gemini||3⏎"
+  printf '\n  1) Claude\n  2) Gemini\n  3) só o terminal\n'
+  botoes_abre nova-tipo "Nova sessão em $(servidor_de "$c") · abrir com" "|claude|Claude||1⏎" "|gemini|Gemini||2⏎" "|terminal|Só o terminal||3⏎"
   read -rp "Abrir com (Enter = 1): " tipo || return
-  case ${tipo:-1} in 1) prog=claude ;; 2) prog= ;; 3) prog=gemini ;; *) MENU_MSG="Opção inválida: '$tipo'"; return ;; esac
-  base=${prog:-term}; sug=$base
+  # Gemini = Antigravity CLI (agy, 28/10/2026, pedido do dono: "sempre foi pelo agy"): o Gemini CLI não aceita mais
+  # o login da conta Google pessoal. O alias do zsh -i escolhe o modelo. Nome sugerido continua gemini, gemini-2…
+  case ${tipo:-1} in 1) prog=claude ;; 2) prog=agy ;; 3) prog= ;; *) MENU_MSG="Opção inválida: '$tipo'"; return ;; esac
+  if [[ $prog == agy ]] && ! como "$c" test -x "$(casa "$c")/.local/bin/agy" </dev/null 2>/dev/null; then
+    MENU_MSG="✗ o agy (Antigravity CLI) não está instalado em $(servidor_de "$c")"; return
+  fi
+  base=${prog:-term}; [[ $base == agy ]] && base=gemini; sug=$base
   while tm "$c" has-session -t "=$sug" </dev/null 2>/dev/null; do sug="$base-$((++k))"; done
   # Campo ✎ (27/10/2026, pedido do dono): o painel do ⌥ Tab só tinha o botão do nome sugerido e não pedia o nome.
-  botoes nova-nome "Nova sessão em $(servidor_de "$c") · digite o nome (Enter = $sug)" "|✎|$sug|letras, números, - e _|✎" "|✅|$sug|nome sugerido|⏎"
+  # Os três passos vão com botoes_abre (28/10/2026): o painel abre sempre, sem depender do tempo do clique anterior.
+  botoes_abre nova-nome "Nova sessão em $(servidor_de "$c") · digite o nome (Enter = $sug)" "|✎|$sug|letras, números, - e _|✎" "|✅|$sug|nome sugerido|⏎"
   read -rp "Nome da sessão nova em $(servidor_de "$c") (Enter = $sug): " nome || return
   botoes_some
   nome=${nome:-$sug}
@@ -627,6 +634,11 @@ botoes_some() {
   abas && [[ -x $BOTOES ]] || return 0
   "$BOTOES" esconde "${TMUX%%,*}" "$(botoes_sessao)" </dev/null >/dev/null 2>&1 || true
 }
+# O mesmo menu, mas o painel ABRE na hora (CS_ABRE=1 → "abre" no botoes.js), como o ☰ menu aberto por clique
+# (28/10/2026, pedido do dono: a Nova sessão caiu na pergunta em texto e não no painel). Sem isso a página só
+# mostra o menu que chega em até 2 s depois do clique anterior (csPede), e o passo do nome consulta o servidor da
+# sessão (has-session, ssh no bf e no Mac) — chegando depois, ficava só o "Nome da sessão nova…" do terminal.
+botoes_abre() { CS_ABRE=1 botoes "$@"; }
 # Um botão por sessão (TERMINAIS), em blocos por servidor; tecla = nº⏎. $1 id, $2 título, resto = mais botões.
 sessoes_botoes() {
   local id=$1 titulo=$2 i c s ia st att srv ic; shift 2
@@ -635,7 +647,7 @@ sessoes_botoes() {
     IFS='|' read -r c s ia st att <<< "${TERMINAIS[i]}"
     srv=$(servidor_de "$c"); [[ $c == "$DONO_SH" ]] || remoto "$c" || srv="$srv ($c)"
     # Logo do Claude ou do Gemini (27/10/2026, pedido do dono): a página troca o nome pelo SVG.
-    case $ia in Claude) ic=claude ;; Gemini) ic=gemini ;; *) ic=⌨️ ;; esac
+    case $ia in Claude) ic=claude ;; Gemini) ic=gemini ;; *) ic=terminal ;; esac
     (( ${att:-0} > 0 )) && st="$st · ● conectado"
     bt+=("$srv|$ic|$s|$st|$((i + 1))⏎")
   done
@@ -651,8 +663,10 @@ tela_menu_botoes() {
     if (( i > 0 )); then r=${REMOTOS[i - 1]}; [[ ${R_ESTADO[$r]:-} == *✗* ]] && est='sem resposta do ssh'; fi
     cab+=("${BLOCOS[i]}|servidor|${BLOCOS[i]}|$est|-")
   done
+  # 🧾 Scripts ~/sh (28/10/2026, pedido do dono: da tela de Sessões e do ⌥ Tab da aba omega se vai para a aba sh
+  # sem passar pela página inicial); a tecla s já troca para a aba fixa sh no OmegaShell.
   sessoes_botoes menu "Ω omega · sessões" "ações|➕|Nova sessão||n⏎" "ações|📝|Renomear||r⏎" \
-    "ações|❌|Fechar|salva git e docs antes|d⏎" "ações|🔄|Atualizar||a⏎" "${cab[@]}"
+    "ações|❌|Fechar|salva git e docs antes|d⏎" "ações|🔄|Atualizar||a⏎" "ações|🧾|Scripts ~/sh|aba sh|s⏎" "${cab[@]}"
 }
 # Um botão por ~/sh (SCRIPTS e SCRIPTS_BF, na numeração da lista); tecla = nº⏎.
 scripts_botoes() {
@@ -763,6 +777,39 @@ abas_sincroniza() {
   done < <(tmux list-windows -F '#{window_id}|#{@omega_conta}|#{@omega_sid}|#{window_name}|#{pane_start_command}')
 }
 
+# Toda sessão com terminal tem a sua aba no OmegaShell (28/10/2026, pedido do dono: "toda aba que tem terminal
+# deve ficar fixada no painel de abas até ser finalizada"): a cada desenho do menu, sessão listada (TERMINAIS)
+# sem aba ganha uma, em segundo plano, sem tirar o foco. Fechar a aba (✕ Fechar shell, Ctrl-b Ctrl-b d) só a faz
+# voltar em até AO_VIVO s; ela some quando a sessão acaba (d fechar, /quit, kill). As sessões sh-* (rodador dos
+# ~/sh) ficam de fora: a aba delas é a do "omega rodar", aberta pela lista sh. Primeiro procura pelo nome (só
+# tmux local); o id da sessão (ssh nas remotas) só quando não achou, para pegar aba de sessão renomeada.
+abas_fixa_terminais() {
+  abas || return 0
+  local l c s ia st att nome sid w ic lista
+  # Uma leitura só das abas (id|nome|IA|conta|id da sessão): nada de tmux por sessão quando a aba já existe.
+  lista=$(tmux list-windows -F '#{window_id}|#{window_name}|#{@omega_ia}|#{@omega_conta}|#{@omega_sid}')
+  for l in "${TERMINAIS[@]}"; do
+    IFS='|' read -r c s ia st att <<< "$l"
+    [[ $s == sh-* ]] && continue
+    nome_ok "$s" && contem "$c" "${CONTAS[@]}" "${REMOTOS[@]}" || continue
+    nome=$(aba_nome "$c" "$s")
+    case $ia in Claude) ic=claude ;; Gemini) ic=gemini ;; *) ic=terminal ;; esac
+    w=$(awk -F'|' -v n="$nome" '$2 == n { print $1; exit }' <<< "$lista")
+    if [[ -z $w ]]; then
+      sid=$(sessao_id "$c" "$s")
+      [[ -n $sid ]] && w=$(awk -F'|' -v c="$c" -v s="$sid" '$4 == c && $5 == s { print $1; exit }' <<< "$lista")
+      if [[ -z $w ]]; then
+        w=$(tmux new-window -d -P -F '#{window_id}' -n "$nome" -c "$HOME" "/usr/local/bin/omega entrar $c $s") || continue
+        [[ -z $sid ]] || aba_marca "$w" "$c" "$sid"
+      fi
+    fi
+    # IA da sessão na aba (@omega_ia: claude, gemini, terminal): o rótulo do tmux.conf (@aba_rotulo) mostra o
+    # emoji e a página do OmegaShell troca pelo logo (28/10/2026, pedido do dono). Só grava quando muda.
+    [[ $(awk -F'|' -v w="$w" '$1 == w { print $3; exit }' <<< "$lista") == "$ic" ]] || tmux set -w -t "$w" @omega_ia "$ic"
+  done
+  return 0
+}
+
 # Menu dos ~/sh no visual do omega do Mac (24/10/2026): bloco do servidor, ícones nas teclas,
 # painel ao vivo (ao_vivo), k = senha, x = excluir.
 tela_sh() {
@@ -868,6 +915,7 @@ ao_vivo() {
 tela_menu() {
   abas_sincroniza
   terminais_lista
+  abas_fixa_terminais
   echo
   [[ -n $MENU_MSG ]] && printf '\e[33m%s\e[0m\n\n' "$MENU_MSG"
   printf '\e[1mn\e[0m    ➕ NOVA       abre uma sessão nova (escolhe servidor, Claude, Gemini ou só o terminal, e nome)\n'
@@ -911,6 +959,77 @@ menu() {
   done
 }
 
+# ✎ Abrir projeto no editor (28/10/2026, pedido do dono: "o fresh, o melhor de terminal, na tela dividida,
+# direto no projeto que estou no chat"). Descobre a pasta do projeto da sessão na máquina dela:
+#   Claude → o transcript da sessão (~/.claude/projects/*/<id>.jsonl, o que começou até 5 min depois do processo
+#            claude) guarda a pasta de trabalho atual ("cwd" da última linha); se for a home, a raiz git do último
+#            arquivo editado;
+#   agy    → o id da conversa está no lock aberto pelo processo (presence/<id>.lock) e o transcript dela cita os
+#            caminhos: a raiz git do último que não é dotfile nem ~/sh;
+#   senão  → a pasta do painel da sessão (pane_current_path).
+# Roda num painel dividido da aba (split-window do abas.sh): abre o fresh na pasta; ao sair, o painel fecha.
+DESCOBRE_PROJETO=$(cat <<'REMOTO'
+s=$1; t=(tmux -L default)
+pane=$("${t[@]}" display -p -t "=$s:" '#{pane_current_path}' 2>/dev/null); pid=$("${t[@]}" display -p -t "=$s:" '#{pane_pid}' 2>/dev/null)
+dir=
+raiz() { local d=$1; while [ -n "$d" ] && [ "$d" != / ]; do [ -d "$d/.git" ] && { echo "$d"; return; }; d=${d%/*}; done; }
+if [ -d /proc ] && [ -n "$pid" ]; then
+  ia= iapid=
+  for p in $(pgrep -P "$pid") $(pgrep -P "$pid" | xargs -r -n1 pgrep -P); do
+    c=$(ps -o comm= -p "$p" 2>/dev/null); case $c in claude|agy) ia=$c iapid=$p; break ;; esac
+  done
+  if [ "$ia" = claude ]; then
+    # Início do processo em segundos (etimes, sem depender do idioma do ps/date: no bf o lstart vem em português).
+    et=$(ps -o etimes= -p "$iapid" 2>/dev/null | tr -d ' '); ini=$(( $(date +%s) - ${et:-0} )); melhor=; dmin=99999
+    for j in "$HOME"/.claude/projects/*/*.jsonl; do
+      ts=$(head -c 8000 "$j" 2>/dev/null | grep -oE '"timestamp":"[^"]+"' | head -1 | cut -d'"' -f4); [ -n "$ts" ] || continue
+      e=$(date -d "$ts" +%s 2>/dev/null) || continue; d=$((e - ini))
+      [ "$d" -ge -5 ] && [ "$d" -le 300 ] && [ "$d" -lt "$dmin" ] && { dmin=$d; melhor=$j; }
+    done
+    if [ -n "$melhor" ]; then
+      cwd=$(tail -c 300000 "$melhor" | grep -oE '"cwd":"[^"]+"' | tail -1 | cut -d'"' -f4)
+      [ -n "$cwd" ] && [ "$cwd" != "$HOME" ] && [ -d "$cwd" ] && dir=$cwd
+      if [ -z "$dir" ]; then
+        for f in $(tail -c 300000 "$melhor" | grep -oE '"file_path":"/[^"]+"' | cut -d'"' -f4 | tac); do r=$(raiz "${f%/*}"); [ -n "$r" ] && { dir=$r; break; }; done
+      fi
+      # Claude que só usa comandos (cd /srv/... && git ...): a raiz git do último caminho citado, como no agy.
+      if [ -z "$dir" ]; then
+        for f in $(tail -c 300000 "$melhor" | grep -oE '/(srv|mnt|home|opt)/[A-Za-z0-9_./-]+' | tac); do
+          case $f in "$HOME"|"$HOME"/.*|"$HOME"/sh|"$HOME"/sh/*) continue ;; esac
+          r=$(raiz "$f"); [ -n "$r" ] && { dir=$r; break; }
+        done
+      fi
+    fi
+  elif [ "$ia" = agy ]; then
+    conv=$(ls -l /proc/$iapid/fd 2>/dev/null | grep -oE 'presence/[0-9a-f-]+\.lock' | head -1 | sed 's#presence/##; s#\.lock##')
+    tr=$HOME/.gemini/antigravity-cli/brain/$conv/.system_generated/logs/transcript.jsonl
+    if [ -n "$conv" ] && [ -f "$tr" ]; then
+      for f in $(tail -c 300000 "$tr" | grep -oE '/(srv|mnt|home|opt)/[A-Za-z0-9_./-]+' | tac); do
+        case $f in "$HOME"/.*|"$HOME"/sh|"$HOME"/sh/*) continue ;; esac
+        r=$(raiz "$f"); [ -n "$r" ] && { dir=$r; break; }
+      done
+    fi
+  fi
+fi
+[ -n "$dir" ] && [ -d "$dir" ] || dir=$pane
+echo "$dir"
+REMOTO
+)
+editor() {
+  local c=$1 s=$2 dir
+  if ! como "$c" bash -c 'command -v fresh >/dev/null' </dev/null 2>/dev/null; then
+    printf '\e[33m✗ o fresh não está instalado em %s\e[0m\n' "$(servidor_de "$c")"
+    read -rp "Enter = fechar " _ || true; return 1
+  fi
+  dir=$(como "$c" env -u TMUX bash -s -- "$s" 2>/dev/null <<< "$DESCOBRE_PROJETO") || dir=
+  dir=${dir##*$'\n'}
+  local re='^/[A-Za-z0-9_./@ -]+$'
+  [[ $dir =~ $re && $dir != *..* ]] || dir=$(casa "$c")
+  printf '\e[1m✎ fresh em %s (%s)\e[0m\n' "$dir" "$(servidor_de "$c")"
+  como "$c" bash -c "cd '$dir' && exec fresh"
+}
+
+
 case ${1:-} in
   sh|s) menu_sh ;;
   # Roda um ~/sh nesta tela e espera o Enter (é o que a aba aberta pelo sh_abre_aba executa).
@@ -936,12 +1055,33 @@ case ${1:-} in
     MENU_MSG=
     nova_sessao
     botoes_some
-    # Abriu a aba da sessão: esta fecha. Erro ou cancelado: a mensagem fica até o Enter.
-    if [[ $MENU_MSG != ▶* && $MENU_MSG != ↪* ]]; then
-      echo; [[ -n $MENU_MSG ]] && printf '\e[33m%s\e[0m\n' "$MENU_MSG"
+    # Abriu a aba da sessão ou cancelou (Esc no painel = Ctrl-D, 28/10/2026, pedido do dono: o menu em texto
+    # não aparece): esta fecha. Erro: a mensagem fica até o Enter.
+    if [[ -n $MENU_MSG && $MENU_MSG != ▶* && $MENU_MSG != ↪* ]]; then
+      echo; printf '\e[33m%s\e[0m\n' "$MENU_MSG"
       read -rp "Enter = fechar a aba " _ || true
     fi ;;
+  # Encerra uma sessão a partir da aba dela (⏻ Encerrar aba do ⌥ Tab, 28/10/2026, pedido do dono: diferente do
+  # ✕ Fechar shell, que só fecha o painel e deixa a sessão viva — e a aba volta): abre numa aba própria com a
+  # mesma pergunta da tecla d (Claude: Esc, /quit e a Regra 7 no awlsrv; terminal: kill-session). A aba da sessão
+  # fecha sozinha quando ela acaba.
+  encerrar)
+    contem "${2:-}" "${CONTAS[@]}" "${REMOTOS[@]}" && nome_ok "${3:-}" || { echo "uso: omega encerrar <conta|bf|mac> <sessão>" >&2; exit 2; }
+    terminais_lista >/dev/null
+    ia= st= att=0
+    for l in "${TERMINAIS[@]}"; do
+      IFS='|' read -r c s ia2 st2 att2 <<< "$l"
+      [[ $c == "$2" && $s == "$3" ]] && { ia=$ia2 st=$st2 att=$att2; break; }
+    done
+    if [[ -z $ia ]]; then
+      printf '\e[33m✗ a sessão %s (%s) não está na lista (já fechou?)\e[0m\n' "$3" "$2"
+      read -rp "Enter = fechar a aba " _ || true
+    else encerrar "$2" "$3" "$ia" "$st" "$att"; botoes_some; fi ;;
+  # Painel dividido da aba com o fresh no projeto da sessão (✎ do ⌥ Tab).
+  editor)
+    contem "${2:-}" "${CONTAS[@]}" "${REMOTOS[@]}" && nome_ok "${3:-}" || { echo "uso: omega editor <conta|bf|mac> <sessão>" >&2; exit 2; }
+    editor "$2" "$3" ;;
   ''|menu) menu ;;
   -h|--help|ajuda) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//' ;;
-  *) echo "uso: omega [sh|nova|rodar <script.sh>|entrar <conta> <sessão>|--help]" >&2; exit 2 ;;
+  *) echo "uso: omega [sh|nova|rodar <script.sh>|entrar <conta> <sessão>|encerrar <conta> <sessão>|editor <conta> <sessão>|--help]" >&2; exit 2 ;;
 esac

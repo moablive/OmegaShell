@@ -34,6 +34,7 @@ acao=${1:-}; sock=${2:-}
 # Só o socket de um servidor tmux da conta, e ids no formato do tmux: nada vira comando sem conferir.
 [[ $sock =~ ^/tmp/tmux-[0-9]+/[A-Za-z0-9._-]+$ && -S $sock ]] || exit 0
 t() { tmux -S "$sock" "$@"; }
+
 id_ok() { [[ $1 =~ ^@[0-9]+$ ]]; }
 # Nome de grupo: letras (com acento), números, _ . - e até 15; nada de | , # } (quebram a barra).
 nome_ok() { [[ $1 =~ ^[[:alnum:]_.-]{1,15}$ ]]; }
@@ -45,6 +46,9 @@ btn() { CS_ABRE=1 "$lib/botoes.sh" cliente "$cliente" tmux "$@"; }
 # "🖥️ Nova sessão…" (27/10/2026, pedido do dono: o ⌥ Tab não tinha como abrir terminal novo escolhendo o
 # servidor e o nome): aba própria com o omega nova — servidor, Claude ou terminal, nome, em botões.
 nova='new-window -n nova-sessao -e OMEGA_ABAS=1 "/usr/local/bin/omega nova"'
+# Nome do grupo na caixa de texto do painel (28/10/2026, pedido do dono: no layout novo, não só na barra do tmux):
+# os botões vêm junto com o command-prompt; a caixa digita o nome e o Enter nele, e o Esc dela cancela o prompt.
+caixa_grupo() { printf "run-shell \"CS_ABRE=1 %s/botoes.sh cliente %s tmux nome-grupo 'Novo grupo · digite o nome' 'g|✎|nome do grupo|letras, números, _ . - e até 15|✎'\" ; " "$lib" "$cliente"; }
 pergunta() { printf "run-shell \"CS_ABRE=1 %s/botoes.sh cliente %s tmux confirma '%s' 'y|✅|Sim||y' 'y|↩️|Não||n'\"" "$lib" "$cliente" "${1//[\'\"\\\$#;]/}"; }
 
 # Marca a 1ª aba de cada grupo (@g_ini/@g_n) e tira a marca das outras.
@@ -147,6 +151,33 @@ case $acao in
     titulo="aba #W"
     janela=$(t display -p -t "$w" '#W')
     jfixa=$(t display -p -t "$w" '#{@jfixa}') pfixa=$(t display -p -t "$w" '#{@pfixa}')
+    # ⏻ Encerrar aba (28/10/2026, pedido do dono: diferente do ✕ Fechar shell, que só fecha o painel e, numa aba de
+    # sessão, a aba volta): aba de sessão → "omega encerrar <conta> <sessão>" numa aba própria (a pergunta da tecla d:
+    # Claude sai com /quit e a Regra 7; terminal é morto); aba comum → kill-window depois de confirmar; fixa → apagado.
+    # O tmux guarda o comando de partida com as aspas ("/usr/local/bin/omega entrar bf gps"): sem o $ no fim da
+    # expressão (28/10/2026: com ele, a aba de sessão caía no ramo de aba comum e o fresh abria aqui, na home).
+    sessao_cmd=$(t list-panes -t "$w" -F '#{pane_index} #{pane_start_command}' | awk '$1 == 1 { $1 = ""; print; exit }')
+    # ✎✕ Fechar editor (28/10/2026, pedido do dono): fecha os painéis do fresh desta aba (apagado se não há).
+    fe_cmd=$(t list-panes -t "$w" -F '#{pane_id} #{pane_start_command}' | awk '/fresh|omega editor/ { printf "kill-pane -t %s ; ", $1 }')
+    fe_cmd=${fe_cmd% ; }
+    if [[ -n $fe_cmd ]]; then fe_k=f fe_d='fecha o fresh desta aba'; else fe_k=- fe_d='sem editor aberto'; fi
+    if [[ $sessao_cmd =~ omega\ entrar\ ([A-Za-z0-9_]+)\ ([A-Za-z0-9._-]+) ]]; then
+      enc_k=e enc_d="sessão ${BASH_REMATCH[2]}: sai e fecha"
+      enc_cmd="new-window -n encerrar-${BASH_REMATCH[2]} -e OMEGA_ABAS=1 \"/usr/local/bin/omega encerrar ${BASH_REMATCH[1]} ${BASH_REMATCH[2]}\""
+    elif [[ -n $jfixa ]]; then enc_k=- enc_d='aba fixa' enc_cmd=''
+    else
+      enc_k=e enc_d='fecha a aba inteira'
+      enc_cmd="$(pergunta "encerrar a aba $janela?") ; confirm-before -p \"encerrar a aba (#W)? y/n\" kill-window"
+    fi
+    # ✎ Abrir projeto no editor (28/10/2026, pedido do dono): o fresh num painel dividido da aba, na pasta do projeto
+    # da sessão (omega editor descobre: transcript do Claude/agy, senão a pasta do painel); aba comum → fresh na
+    # pasta do painel; fixa → apagado.
+    if [[ $sessao_cmd =~ omega\ entrar\ ([A-Za-z0-9_]+)\ ([A-Za-z0-9._-]+) ]]; then
+      ed_k=p ed_d="fresh ao lado, no projeto da sessão"
+      ed_cmd="split-window -h -e OMEGA_ABAS=1 \"/usr/local/bin/omega editor ${BASH_REMATCH[1]} ${BASH_REMATCH[2]}\""
+    elif [[ -n $jfixa ]]; then ed_k=- ed_d='aba fixa' ed_cmd=''
+    else ed_k=p ed_d='fresh ao lado, nesta pasta' ed_cmd='split-window -h -c "#{pane_current_path}" fresh'
+    fi
     # Reaberto por um clique de mouse no próprio menu: sem a pausa, o tmux ainda está fechando o
     # menu anterior e fecha o novo junto (com teclado não acontecia).
     [[ -n $aberto$para ]] && sleep 0.2
@@ -221,16 +252,17 @@ case $acao in
     # Abas para trocar (o ⌥ Tab do navegador abre este menu nas abas sem menu próprio, como o Cmd+Tab):
     # a última usada primeiro — ⌥ Tab e soltar volta para ela —, depois as outras na ordem da barra;
     # teclas 1–9, e O e S para a omega e a sh no ⌥ Tab (as minúsculas são das ações).
-    babas=() mabas=() bfix=() mfix=() k=0
+    mabas=() bfix=() mfix=() k=0
     while IFS='|' read -r ultima j jn jc jf; do
       [[ $j == "$w" ]] && continue
       case $jn in
         # As fixas saíram da lista do ☰ menu (27/10/2026, pedido do dono: ficam na página inicial). Pelo ⌥ Tab
         # (CS_ATALHO=1, tmux.conf) a omega e a sh voltam, num grupo à parte no começo (27/10/2026, pedido do dono).
+        # O grupo "OmegaShell" saiu dos botões (28/10/2026, pedido do dono: repete a página inicial); o 🧾 sh voltou
+        # no mesmo dia (de uma sessão se vai rodar um ~/sh): só ele nos botões; o Ω omega fica só no menu em texto.
         omega|sh)
           [[ ${CS_ATALHO:-} == 1 ]] || continue
-          if [[ $jn == omega ]]; then jk=O ic=Ω d='sessões'; else jk=S ic=🧾 d='scripts ~/sh'; fi
-          bfix+=("OmegaShell|$ic|$jn|$d|$jk")
+          if [[ $jn == omega ]]; then jk=O ic=Ω d='sessões'; else jk=S ic=🧾 d='scripts ~/sh'; bfix+=("OmegaShell|$ic|$jn|$d|$jk"); fi
           mfix+=("$ic $jn ($d)" "$jk" "select-window -t $j")
           continue ;;
         conselho) continue ;;
@@ -238,14 +270,19 @@ case $acao in
            (( k < 9 )) || continue
            jk=$((++k)); [[ $jc == *claude* ]] && ic=🤖 || ic=⌨️ ;;
       esac
-      babas+=("abas|$ic|${jn//|/}|$( (( ultima )) && echo 'última usada')|$jk")
+      # A seção "abas" saiu dos botões (28/10/2026, pedido do dono: repete a barra do topo e a página inicial);
+      # fica só no menu em texto do tmux.
       mabas+=("$ic ${jn//[\'\"\\\$#;]/}" "$jk" "select-window -t $j")
     done < <(t list-windows -t "$s" -F '#{window_last_flag}|#{window_id}|#{window_name}|#{pane_current_command}|#{@jfixa}' | sort -t'|' -k1,1nr -s)
-    babas=("${bfix[@]}" "${babas[@]}"); mabas=("${mfix[@]}" "${mabas[@]}")
+    mabas=("${mfix[@]}" "${mabas[@]}")
     (( ${#mabas[@]} )) && mabas+=("")
-    btn painel "aba $janela" "${babas[@]}" 'janela|🖥️|Nova sessão…|servidor e nome|N' \
+    btn painel "aba $janela" "${bfix[@]}" 'janela|🖥️|Nova sessão…|servidor e nome|N' \
       'janela|➕|Nova janela|shell aqui|n' 'janela|⫼|Dividir||d' \
+      "janela|✏️|Renomear…|$([[ -n $jfixa ]] && echo 'aba fixa')|$([[ -n $jfixa ]] && echo - || echo r)" \
       "janela|✕|Fechar shell|${pfixa:+aba fixa}|$([[ -n $pfixa ]] && echo - || echo x)" \
+      "janela|⏻|Encerrar aba|$enc_d|$enc_k" \
+      "janela|✎|Abrir projeto no editor|$ed_d|$ed_k" \
+      "janela|⌧|Fechar editor|$fe_d|$fe_k" \
       'organizar|▦|Grupo…||g' "organizar|⇄|Mover|$([[ $aberto == mover ]] && echo 'aberto abaixo')|m" \
       'organizar|⇔|Tamanho…||t' \
       "${bmov[@]}"
@@ -254,7 +291,11 @@ case $acao in
       "🖥️ Nova sessão… (servidor e nome)" N "$nova" \
       "+ Nova janela (shell aqui)" n 'new-window -c "#{pane_current_path}"' \
       "⫼ Dividir"     d 'split-window -h -c "#{pane_current_path}"' \
+      "#{?@jfixa,-,}✏️ Renomear…" r "command-prompt -I '#W' -p 'nome da aba:' \"rename-window -t $w \\\"%%%\\\"\"" \
       "#{?@pfixa,-,}✕ Fechar shell" x "$(pergunta "fechar este shell ($janela)?") ; confirm-before -p \"fechar este shell (#W)? y/n\" kill-pane" \
+      "#{?@jfixa,-,}⏻ Encerrar aba" e "$enc_cmd" \
+      "#{?@jfixa,-,}✎ Abrir projeto no editor (fresh)" p "$ed_cmd" \
+      "$([[ -n $fe_cmd ]] || echo -)⌧ Fechar editor" f "$fe_cmd" \
       "" \
       "▦ Grupo…" g "run-shell \"$lib/abas.sh menu $sock $w $cliente\"" \
       "${mov[@]}" \
@@ -287,7 +328,9 @@ case $acao in
       [[ -n $jf ]] && continue
       (( k < ${#teclas[@]} )) || break
       tk=${teclas[k]}; k=$((k + 1))
-      cor=${jc:-#5c5c7a}; [[ $cor =~ ^#[0-9a-fA-F]{6}$ ]] || cor='#5c5c7a'
+      # Sem @cor: a aba é preta (tmux.conf, 28/10/2026, pedido do dono: toda aba nasce preta até ganhar cor).
+      pad='#000000'
+      cor=${jc:-$pad}; [[ $cor =~ ^#[0-9a-fA-F]{6}$ ]] || cor=$pad
       if [[ $sel == *"|$j|"* ]]; then novo+="$j|"; n=$((n + 1)); marca='✓ marcada'; caixa='☑'
       else marca=${jg:+▦ $jg}; caixa='☐'; fi
       bt+=("abas|$cor|${jn//|/}|$marca|$tk")
@@ -297,7 +340,7 @@ case $acao in
     [[ -n $op ]] && sleep 0.2   # reaberto por um clique no próprio menu (ver o ⇄ Mover)
     tem=-; (( n )) && tem=
     itens+=("" "${tem}➕ Criar grupo com as $n marcadas…" n \
-      "command-prompt -p 'nome do grupo:' \"set -t $w @juntar_nome \\\"%%%\\\" ; run-shell \\\"$eu juntar_ok $sock $w\\\"\"")
+      "$(caixa_grupo)command-prompt -p 'nome do grupo:' \"set -t $w @juntar_nome \\\"%%%\\\" ; run-shell \\\"$eu juntar_ok $sock $w\\\"\"")
     bt+=("ações|➕|Criar grupo…|com as $n marcada$( (( n == 1 )) || echo s)|${tem:-n}")
     letras=(a b c d e f g h i) l=0
     while IFS= read -r g; do
@@ -346,7 +389,7 @@ case $acao in
       bt+=("pôr no grupo|▦|$g||$k")
     done < <(t list-windows -t "$s" -F '#{@grupo}' | awk 'NF && !v[$0]++')
     bt+=("pôr no grupo|➕|Novo grupo…||n")
-    itens+=("Novo grupo…" n "command-prompt -p 'nome do grupo:' \"set -w -t $w @grupo \\\"%%%\\\" ; run-shell \\\"$eu grupo $sock $w\\\"\"")
+    itens+=("Novo grupo…" n "$(caixa_grupo)command-prompt -p 'nome do grupo:' \"set -w -t $w @grupo \\\"%%%\\\" ; run-shell \\\"$eu grupo $sock $w\\\"\"")
     if [[ -n $atual ]]; then
       itens+=("" "" "")
       if [[ $r == *"|$atual|"* ]]; then itens+=("Expandir o grupo $atual" r "run-shell \"$eu recolher $sock $w\""); bt+=("grupo $atual|▾|Expandir||r")
