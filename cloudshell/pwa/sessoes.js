@@ -86,7 +86,7 @@
   };
   var REUSO = / · ↻ reutilizáveis$/;
 
-  var t, raiz, w, menu = null, sel = -1, buf = '', logos = {}, vis = [], desenhado = '';
+  var t, raiz, w, menu = null, sel = -1, buf = '', logos = {}, vis = [], desenhado = '', apertado = false, pendente = null;
 
   function digita(d) {
     if (!t) t = window.term;
@@ -251,6 +251,9 @@
     // a página apagava e recriava todos os cartões — travava a rolagem e o hover, sobretudo no celular).
     var chave = JSON.stringify(m);
     if (menu && menu.id === m.id && chave === desenhado && raiz.classList.contains('on')) { ultimo[m.id] = m; return; }
+    // Clique em andamento (botão apertado e ainda não solto): redesenhar agora apagaria o botão e o clique se perderia
+    // ("o Início às vezes não abre", 30/10/2026). Guarda o menu e redesenha logo depois de soltar.
+    if (apertado && menu && menu.id === m.id && raiz.classList.contains('on')) { ultimo[m.id] = m; pendente = m; return; }
     desenhado = chave;
     ultimo[m.id] = m;
     if (!menu || menu.id !== m.id) sel = 0;                        // outra tela: começa no primeiro
@@ -287,6 +290,14 @@
     raiz = tag('div', null, null, document.body); raiz.id = 'css';
     w = tag('div', 'w', null, raiz);
     window.addEventListener('cs-menu', function (ev) { recebe(ev.detail); });
+    // Segura o redesenho do apertar ao soltar (mouse ou dedo); o click dispara antes do setTimeout.
+    raiz.addEventListener('pointerdown', function () { apertado = true; }, true);
+    window.addEventListener('pointerup', solta, true);
+    window.addEventListener('pointercancel', solta, true);
+    function solta() {
+      if (!apertado) return;
+      setTimeout(function () { apertado = false; if (pendente) { var m = pendente; pendente = null; recebe(m); } }, 0);
+    }
     document.addEventListener('keydown', teclado, true);
   }
   if (document.body) monta(); else document.addEventListener('DOMContentLoaded', monta);

@@ -656,7 +656,8 @@ botoes() {
   abas && [[ -x $BOTOES ]] || return 0
   local sess sig
   sess=$(botoes_sessao)
-  sig=$(printf '%s\x1f' "$@"; tmux list-clients -t "=$sess" -F '#{client_tty}' 2>/dev/null)
+  # tty + hora da conexão: numa reconexão o /dev/pts/N costuma ser reaproveitado, e só o nome não muda.
+  sig=$(printf '%s\x1f' "$@"; tmux list-clients -t "=$sess" -F '#{client_tty} #{client_created}' 2>/dev/null)
   if [[ -z ${CS_ABRE:-} && $sig == "$BOTOES_SIG" ]] && (( SECONDS - BOTOES_QUANDO < 15 )); then return 0; fi
   BOTOES_SIG=$sig BOTOES_QUANDO=$SECONDS
   "$BOTOES" sessao "${TMUX%%,*}" "$sess" omega "$@" </dev/null >/dev/null 2>&1 || true
