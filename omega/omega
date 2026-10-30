@@ -872,7 +872,9 @@ menu_sh() {
 renomear() {
   local c=$1 s=$2 novo
   echo; echo "  Sessão: $s ($(servidor_de "$c"), usuário $c)"
-  botoes renomear "Renomear $s · digite o novo nome" "|↩️|Cancelar||⏎"
+  # Mesmo painel do passo do nome da Nova sessão (30/10/2026, pedido do dono: o Renomear caía na pergunta em
+  # texto): campo ✎ para digitar e abre na hora (CS_ABRE=1, botoes_abre), com o nome atual como dica.
+  botoes_abre renomear "Renomear $s ($(servidor_de "$c")) · digite o novo nome" "|✎|$s|letras, números, - e _|✎" "|↩️|Cancelar||⏎"
   read -rp "Novo nome (Enter = cancelar): " novo || return
   botoes_some
   [[ -n $novo ]] || { MENU_MSG="Nada renomeado."; return; }
@@ -981,7 +983,8 @@ menu() {
       [rRdD]*)
         local op=${esc:0:1} num=${esc:1}
         if [[ -z $num ]]; then
-          sessoes_botoes sessao "$([[ $op == [rR] ]] && echo '📝 Renomear' || echo '❌ Fechar') qual sessão?" "|↩️|Voltar||⏎"
+          # Abre na hora (CS_ABRE=1), como os passos da Nova sessão: só "r" ou "d" no celular também cai no painel.
+          CS_ABRE=1 sessoes_botoes sessao "$([[ $op == [rR] ]] && echo '📝 Renomear' || echo '❌ Fechar') qual sessão?" "|↩️|Voltar||⏎"
           read -rp "Número da sessão: " num || continue
           [[ -n $num ]] || continue
         fi
