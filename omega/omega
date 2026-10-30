@@ -129,6 +129,25 @@ tmux -L default ls -F '#{session_name}' 2>/dev/null | while IFS= read -r s; do
     if grep -qE 'Do you want to|Esc to cancel|Enter to select|❯ *1\. ' <<< "$pe"; then st='✋ esperando você'
     elif grep -qi 'esc to interrupt' <<< "$pe"; then st='🤖 trabalhando'
     else st='💤 pronto'; fi
+    # Estado pelos hooks do Claude (30/10/2026, ideia do bjornjee/agent-dashboard): ~/.omega/estado/<sessão>.json,
+    # gravado pelo omega-estado a cada evento, vale mais que a tela. "trabalhando" só vale por 30 min sem evento
+    # novo (Claude que morreu não avisa); os outros, por 24 h. Fora disso, ou sem arquivo, fica o que a tela diz.
+    e=$HOME/.omega/estado/$s.json
+    if [[ -f $e ]]; then
+      IFS=$'\x1f' read -r est det tin tout <<< "$(jq -r '[.estado, (.detalhe // ""), (.tokens_entrada // 0), (.tokens_saida // 0)] | map(tostring) | join("\u001f")' "$e" 2>/dev/null)"
+      idade=$(( $(date +%s) - $(stat -c %Y "$e" 2>/dev/null || echo 0) ))
+      if { [[ $est == trabalhando ]] && (( idade < 1800 )); } || { [[ $est != trabalhando && -n $est ]] && (( idade < 86400 )); }; then
+        case $est in
+          permissao)   st="✋ esperando você · permissão${det:+: $det}" ;;
+          pergunta)    st='✋ esperando você · pergunta' ;;
+          trabalhando) st="🤖 trabalhando${det:+ · $det}" ;;
+          pronto)      st='💤 pronto' ;;
+        esac
+        tot=$(( ${tin:-0} + ${tout:-0} ))
+        if (( tot >= 1000000 )); then st+=" · $(( tot / 1000000 )),$(( tot % 1000000 / 100000 ))M tok"
+        elif (( tot >= 1000 )); then st+=" · $(( tot / 1000 ))k tok"; fi
+      fi
+    fi
   elif [[ $s == sh-* && $(id -un) == "$1" && ! -f $HOME/.cache/omega-sh/$s.rc ]]; then
     # Sessão do rodador do omega (bash … | tee) na conta dona dos ~/sh ($1): sem .rc o ~/sh ainda
     # está rodando, mesmo que o comando do painel seja "bash".
@@ -921,17 +940,30 @@ tela_menu() {
   printf '\e[1mn\e[0m    ➕ NOVA       abre uma sessão nova (escolhe servidor, Claude, Gemini ou só o terminal, e nome)\n'
   printf '\e[1mr\e[0m    📝 RENOMEAR   troca o nome de uma sessão (r1 = renomeia a 1)\n'
   printf '\e[1md\e[0m    ❌ FECHAR     encerra uma sessão (d1 = fecha a 1; salva git e docs antes)\n'
+  printf '\e[1my\e[0m    ✅ SIM        responde Sim à sessão que pede permissão (y1 = na 1), sem abrir o terminal\n'
+  printf '\e[1mx\e[0m    ✖️  NÃO        responde Não (x1 = na 1)\n'
   # No CloudShell a lista dos ~/sh já é a aba fixa sh (26/10/2026, pedido do dono): sem o botão aqui.
   abas || printf '\e[1msh\e[0m   🧾 SH         roda um script .sh deste servidor\n'
   printf '\e[1ma\e[0m    🔄 ATUALIZAR  relê agora (a lista já se atualiza sozinha a cada %s s)\n' "$AO_VIVO"
   if abas; then echo; else printf '\e[1mq\e[0m    🚪 SAIR\n\n'; fi
+}
+# ✅ Sim / ✖ Não sem abrir o terminal (30/10/2026, ideia do bjornjee/agent-dashboard, pedido do dono): a tecla vai por
+# send-keys para a sessão que está pedindo permissão — y e n são os atalhos do próprio diálogo do Claude Code. Só
+# quando o estado diz "esperando" (omega-estado ou tela): fora disso a letra cairia no prompt do Claude como texto.
+# A tela de Sessões do OmegaShell (pwa/sessoes.js) mostra os dois botões no cartão e digita y<nº>⏎ / x<nº>⏎.
+responder() {
+  local c=$1 s=$2 k=$3 st=$4
+  [[ $st == *esperando* ]] || { MENU_MSG="$s não está esperando você: nada enviado"; return; }
+  if tm "$c" send-keys -t "=$s:" -l "$k" </dev/null 2>/dev/null && { sleep 0.2; tm "$c" send-keys -t "=$s:" Enter </dev/null 2>/dev/null; }; then
+    MENU_MSG="$([[ $k == y ]] && echo '✅ Sim' || echo '✖ Não') enviado para $s ($(servidor_de "$c"))"
+  else MENU_MSG="✗ não consegui falar com $s"; fi
 }
 menu() {
   local esc i c s ia st att
   MENU_MSG=
   local p_sh='sh, ' p_fim='a ou q'; abas && p_sh= p_fim=a
   while true; do
-    ao_vivo tela_menu "Escolha: número da sessão, n, r, d, ${p_sh}${p_fim} (Enter = 1): " || return   # Ctrl-D: sai
+    ao_vivo tela_menu "Escolha: número da sessão, n, r, d, y, x, ${p_sh}${p_fim} (Enter = 1): " || return   # Ctrl-D: sai
     esc=$ESC; MENU_MSG=
     esc=${esc// /}
     case $esc in
@@ -940,6 +972,12 @@ menu() {
       n|N) nova_sessao ;;
       # No CloudShell o sh digitado vai para a aba fixa sh.
       s|S|sh|SH) if abas; then command tmux select-window -t ':=sh' 2>/dev/null || MENU_MSG="a aba sh não está aberta (reabra o CloudShell)"; else menu_sh; fi ;;
+      [yYxX]*)
+        local op=${esc:0:1} num=${esc:1}
+        [[ -n $num ]] || { MENU_MSG="use y<nº> (Sim) ou x<nº> (Não): y1 responde à sessão 1"; continue; }
+        i=$(indice "$num" ${#TERMINAIS[@]}) && [[ -n $i ]] || { MENU_MSG="Opção inválida: '$op$num'"; continue; }
+        IFS='|' read -r c s ia st att <<< "${TERMINAIS[i]}"
+        responder "$c" "$s" "$([[ $op == [yY] ]] && echo y || echo n)" "$st" ;;
       [rRdD]*)
         local op=${esc:0:1} num=${esc:1}
         if [[ -z $num ]]; then

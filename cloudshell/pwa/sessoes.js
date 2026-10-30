@@ -58,6 +58,12 @@
     '#css .s .e svg{width:30px;height:30px}',
     '#css .s .r{font:600 13.5px ui-monospace,Menlo,monospace;word-break:break-all}',
     '#css .s .d{font-size:11.5px;color:rgba(242,242,247,.6);margin-top:3px}',
+    // ✅ Sim / ✖ Não no cartão (30/10/2026, ideia do agent-dashboard): só quando a sessão pede permissão.
+    '#css .s .ac{display:flex;gap:6px;margin-top:6px}',
+    '#css .s .ac span{padding:4px 10px;border-radius:9px;font-size:12px;font-weight:600;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14)}',
+    '#css .s .ac span.sim{background:rgba(105,219,124,.22);border-color:rgba(105,219,124,.5)}',
+    '#css .s .ac span.nao{background:rgba(255,92,122,.18);border-color:rgba(255,92,122,.45)}',
+    '#css .s .ac span:hover{background:rgba(255,255,255,.22)}',
     '#css .s .k{position:absolute;top:50%;right:10px;transform:translateY(-50%);min-width:16px;padding:0 4px;border-radius:6px;',
     'font:600 10px ui-monospace,Menlo,monospace;line-height:16px;color:#14141f;background:rgba(179,136,255,.9)}',
     '#css .gr.lista{grid-template-columns:1fr;gap:6px}',
@@ -73,7 +79,7 @@
   var MODO = {
     menu: { titulo: 'Sessões', conta: function (n) { return n + (n === 1 ? ' aberta' : ' abertas'); }, lista: false,
             un: ['sessão', 'sessões'], vazio: 'nenhuma sessão aberta', letras: /^[nrda]$/i,
-            rod: 'nº ou ← → e ⏎ abre · n nova · r renomeia · d fecha · esc lista em texto · ⌥ Tab menus' },
+            rod: 'nº ou ← → e ⏎ abre · n nova · r renomeia · d fecha · ✅/✖ no cartão responde · esc lista em texto · ⌥ Tab menus' },
     sh:   { titulo: 'Scripts ~/sh', conta: function (n) { return n + (n === 1 ? ' script' : ' scripts'); }, lista: true,
             un: ['script', 'scripts'], vazio: 'nada para rodar', letras: /^[takx]$/i,
             rod: 'nº ou ↑ ↓ e ⏎ roda · t automático · a atualiza · k senha do sudo · x exclui · esc lista em texto · ⌥ Tab menus' }
@@ -184,6 +190,16 @@
         var tx2 = tag('div', null, null, bt);
         tag('div', 'r', it.r, tx2);
         if (it.d) tag('div', 'd', it.d, tx2);
+        // Sessão pedindo permissão (estado dos hooks, omega-estado): Sim e Não aqui mesmo, sem abrir o terminal.
+        // O clique digita y<nº>⏎ / x<nº>⏎ no omega (responder), que manda a tecla por send-keys para a sessão.
+        if (M === MODO.menu && /permiss/i.test(it.d || '')) {
+          var ac = tag('div', 'ac', null, tx2), num = (it.k || '').replace('⏎', '');
+          [['sim', '✅ Sim', 'y'], ['nao', '✖ Não', 'x']].forEach(function (b) {
+            var sp = tag('span', b[0], b[1], ac);
+            sp.addEventListener('mousedown', function (ev) { ev.preventDefault(); ev.stopPropagation(); });
+            sp.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); manda(b[2] + num + '⏎'); });
+          });
+        }
         tag('span', 'k', it.k.replace('⏎', ''), bt);
         bt.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
         bt.addEventListener('mouseover', function () { if (sel !== n) { sel = n; marca(); } });
