@@ -4,7 +4,8 @@
 // O host (host/botoes.sh, chamado pelo omega e pelos menus do tmux) escreve no terminal a sequência
 // OSC 7717 com o menu em JSON (base64); vazia = some. O menu fica guardado e só aparece no atalho
 // ⌥ Option + Tab, como o Cmd+Tab do Mac: segurando o Option, cada Tab passa para o próximo botão
-// (Shift volta) e soltar o Option abre o escolhido. Aba sem menu (um Claude, um shell): o atalho pede
+// (Shift volta); soltar o Option NÃO abre nada: só o Enter (ou o clique) entra no escolhido, e o ✕ Cancelar
+// ou o Esc fecham (30/10/2026, pedido do dono). Aba sem menu (um Claude, um shell): o atalho pede
 // ao tmux o "☰ menu" (\e[96~ = User3), que traz as abas para trocar e as ações. Clicar (ou ←→ e
 // Enter) também serve; Esc fecha. O botão só DIGITA a tecla do item no terminal, a mesma que se
 // digitaria à mão: nenhum comando sai daqui. No celular (sem Option) o ⌥⇥ no canto abre.
@@ -30,6 +31,8 @@
     '#csb .ini{all:unset;cursor:pointer;display:block;margin:10px auto 0;padding:6px 14px;border-radius:12px;font-size:12px;font-weight:600;',
     'background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12)}',
     '#csb .ini:hover{background:rgba(255,255,255,.14);border-color:rgba(179,136,255,.5)}',
+    '#csb .rodape{display:flex;gap:8px;justify-content:center}#csb .rodape .ini{margin:10px 0 0}',
+    '#csb .ini.canc:hover{border-color:rgba(255,99,99,.6)}',
     '#csb .l{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}',
     '#csb .b{all:unset;box-sizing:border-box;position:relative;width:104px;padding:12px 6px 9px;border-radius:18px;',
     'display:flex;flex-direction:column;align-items:center;gap:5px;cursor:pointer;',
@@ -251,7 +254,7 @@
   var menu = null;      // {tipo, id, t, i: [{g, e, r, d, k}]}
   var sel = 0;
   var aberto = false;   // painel na tela (só pelo ⌥ Tab ou pelo botão do canto)
-  var segura = false;   // aberto pelo ⌥ Tab com o Option ainda apertado: soltar abre o escolhido
+  var segura = false;   // aberto pelo ⌥ Tab com o Option ainda apertado (só muda a dica; soltar não abre nada)
   var pede = false;     // ⌥ Tab numa aba sem menu: o ☰ menu do tmux está a caminho
   var mx = -1, my = -1; // onde o mouse está (27/10/2026): o item embaixo dele é o escolhido…
   var rato = false;     // …até o teclado (Tab, setas) escolher outro; mexer o mouse devolve a vez a ele
@@ -344,11 +347,18 @@
       if (menu && menu.tipo === 'tmux') { some(); digita('\x1b'); } else { aberto = segura = false; mostra(); }
       var v = document.getElementById('csi-v'); if (v) v.click();
     });
-    painel.appendChild(ini);
+    // ✕ Cancelar (30/10/2026, pedido do dono: "ficou faltando um botão de cancelar"): o mesmo que o Esc.
+    var canc = document.createElement('button'); canc.type = 'button'; canc.tabIndex = -1; canc.className = 'ini canc';
+    canc.textContent = '✕ Cancelar';
+    canc.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
+    canc.addEventListener('click', function () { cancela(); t.focus(); });
+    var rod = document.createElement('div'); rod.className = 'rodape';
+    rod.appendChild(canc); rod.appendChild(ini);
+    painel.appendChild(rod);
     var h = document.createElement('div'); h.className = 'h';
-    h.textContent = segura && menu.id === 'cor' ? '⌥ segurado: C próxima cor · ⇧C volta · solte o ⌥ para aplicar · esc fecha'
-                  : segura ? '⌥ segurado: tab próximo · ⇧tab volta · solte o ⌥ para abrir · esc fecha'
-                           : '← → ou tab escolher · ⏎ abrir · esc fecha';
+    h.textContent = segura && menu.id === 'cor' ? '⌥ segurado: C próxima cor · ⇧C volta · ⏎ aplicar · esc cancela'
+                  : segura ? '⌥ segurado: tab próximo · ⇧tab volta · ⏎ abrir · esc cancela'
+                           : '← → ou tab escolher · ⏎ abrir · esc cancela';
     painel.appendChild(h);
     sobMouse();
     marca();
@@ -357,7 +367,7 @@
   }
 
   // Painel aberto (ou redesenhado) embaixo do mouse parado: o item sob o cursor vira o escolhido, para
-  // soltar o ⌥ abrir o que se está vendo destacado (27/10/2026, pedido do dono).
+  // o Enter abrir o que se está vendo destacado (27/10/2026, pedido do dono; desde 30/10 só o Enter entra).
   function sobMouse() {
     if (!rato || mx < 0 || !aberto) return;
     var el = document.elementFromPoint(mx, my), b = el && el.closest && el.closest('#csb .b');
@@ -472,6 +482,12 @@
       else atalho(true);
       return;
     }
+    // ⌥ ainda apertado: Enter entra no escolhido e Esc cancela (30/10/2026) — não precisa soltar antes.
+    if (aberto && e.altKey && !e.metaKey && !e.ctrlKey && (e.key === 'Enter' || e.key === 'Escape')) {
+      para(e);
+      if (e.key === 'Enter') { sobMouse(); escolhe(sel); } else cancela();
+      return;
+    }
     if (!aberto || e.metaKey || e.ctrlKey || e.altKey) return;
     var k = e.key;
     if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'Tab') anda(k === 'Tab' && e.shiftKey ? -1 : 1);
@@ -486,10 +502,12 @@
     para(e);
   }
 
-  // Soltar o Option com o painel aberto pelo ⌥ Tab abre o escolhido, como o Cmd+Tab.
+  // Soltar o Option NÃO entra em nada (30/10/2026, pedido do dono: "só deve entrar em algo se eu clicar Enter";
+  // antes abria o escolhido, como o Cmd+Tab, e entrava sem querer). O painel fica aberto com o destaque onde
+  // estava: Enter (ou clique) entra, ✕ Cancelar ou Esc fecham. Só a dica embaixo muda.
   function solta(e) {
     if (e.key !== 'Alt') return;
-    if (aberto && segura) { segura = false; para(e); sobMouse(); escolhe(sel); }
+    if (aberto && segura) { segura = false; para(e); desenha(); }
     else segura = false;
   }
 
