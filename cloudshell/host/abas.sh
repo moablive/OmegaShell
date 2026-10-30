@@ -8,6 +8,8 @@
 #                                                   ao expandir vai para essa aba
 #   abas.sh arruma   <socket> <@janela>             junta as abas de cada grupo e marca
 #   abas.sh marca    <socket> <@janela>             só marca (depois de arrastar ou mover)
+#   abas.sh arrasta  <socket> <@ativa> <@alvo>      arrastar pela barra (30/10/2026): troca a aba ativa (a
+#                                                   arrastada) com a que está sob o mouse e segue nela
 #   abas.sh apagar   <socket> <@janela> <grupo>     apaga o grupo: as abas dele ficam, soltas (26/10/2026)
 #   abas.sh painel   <socket> <@janela> <cliente> [mover [e|d|c|f] | tamanho | cor]
 #                                                   o "☰ menu" da barra (26/10/2026); "mover" abre o dropdown
@@ -100,6 +102,14 @@ s=$(t display -p -t "$w" '#{session_id}' 2>/dev/null) || exit 0
 
 case $acao in
   marca|arruma) "$acao" "$s" ;;
+  arrasta)
+    # $w = aba ativa (a arrastada), $4 = aba sob o mouse. A cada movimento do mouse o tmux chama de novo: igual =
+    # nada; diferente = troca (-d, para a ativa não mudar de índice) e seleciona a arrastada, que assim segue o
+    # mouse. Os rótulos dos grupos são refeitos ao soltar (MouseDragEnd1Status → marca).
+    alvo=${4:-}
+    id_ok "$alvo" || exit 0
+    [[ $alvo == "$w" ]] && exit 0
+    t swap-window -d -s "$w" -t "$alvo" && t select-window -t "$w" ;;
   apagar)
     g=${4:-}
     nome_ok "$g" || exit 0
