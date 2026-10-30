@@ -86,7 +86,7 @@
   };
   var REUSO = / · ↻ reutilizáveis$/;
 
-  var t, raiz, w, menu = null, sel = -1, buf = '', logos = {}, vis = [];
+  var t, raiz, w, menu = null, sel = -1, buf = '', logos = {}, vis = [], desenhado = '';
 
   function digita(d) {
     if (!t) t = window.term;
@@ -247,6 +247,11 @@
     }
     if (m.tipo !== 'omega' || !MODO[m.id]) { some(); return; }   // outra pergunta do omega: fica com os botões
     raiz.classList.remove('enviando');
+    // Menu igual ao que já está na tela: nada a refazer (30/10/2026, lentidão: o omega reenvia a cada segundo e
+    // a página apagava e recriava todos os cartões — travava a rolagem e o hover, sobretudo no celular).
+    var chave = JSON.stringify(m);
+    if (menu && menu.id === m.id && chave === desenhado && raiz.classList.contains('on')) { ultimo[m.id] = m; return; }
+    desenhado = chave;
     ultimo[m.id] = m;
     if (!menu || menu.id !== m.id) sel = 0;                        // outra tela: começa no primeiro
     menu = m;

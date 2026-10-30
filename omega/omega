@@ -177,6 +177,8 @@ terminais_lista() {
   TERMINAIS=()
   agora=$(date +%s)
   for c in "${CONTAS[@]}" "${REMOTOS[@]}"; do
+    # root quase nunca tem sessão e cada consulta é um sudo: vazio, só olha de novo daqui a 60 s (30/10/2026).
+    [[ $c == root ]] && (( SECONDS < ${ROOT_VAZIO_ATE:-0} )) && continue
     erro=$(mktemp); rc=0
     remoto "$c" && dono=${R_DONO[$c]} || dono=$DONO_SH
     saida=$(como "$c" env -u TMUX bash -c "$LISTA_TMUX" _ "$dono" 2>"$erro" </dev/null) || rc=$?
@@ -191,6 +193,7 @@ terminais_lista() {
     # g = bloco: 1 este servidor, 2… os remotos (um bloco por servidor, cada um do mais recente ao
     # mais antigo)
     g=1; for k in "${!REMOTOS[@]}"; do [[ ${REMOTOS[k]} == "$c" ]] && g=$((k + 2)); done
+    [[ $c == root && -z $saida && $rc == 0 ]] && ROOT_VAZIO_ATE=$((SECONDS + 60))
     [[ -n $saida ]] && todas+=$(sed "s/^/$g|$c|/" <<< "$saida")$'\n'
   done
   printf '\e[32m%s ✓\e[0m' "$HOST_CURTO"
@@ -645,11 +648,21 @@ abas() { [[ ${OMEGA_ABAS:-} == 1 && -n ${TMUX:-} ]]; }
 # tecla do item — a mesma que se digitaria aqui. botoes <id> <título> "grupo|ícone|rótulo|detalhe|tecla"…
 BOTOES=/usr/local/lib/cloudshell/botoes.sh
 botoes_sessao() { tmux display -p -t "${TMUX_PANE:-}" '#{session_name}' 2>/dev/null; }
+# Reenvio só quando muda (30/10/2026, lentidão: o ao_vivo chama a cada segundo e a página refazia a tela toda).
+# Mesmo menu para os mesmos navegadores = nada sai; mudou o menu, entrou um navegador novo (recarga, troca de
+# rede) ou passaram 15 s = sai. Menu aberto por clique (CS_ABRE=1) sai sempre.
+BOTOES_SIG= BOTOES_QUANDO=0
 botoes() {
   abas && [[ -x $BOTOES ]] || return 0
-  "$BOTOES" sessao "${TMUX%%,*}" "$(botoes_sessao)" omega "$@" </dev/null >/dev/null 2>&1 || true
+  local sess sig
+  sess=$(botoes_sessao)
+  sig=$(printf '%s\x1f' "$@"; tmux list-clients -t "=$sess" -F '#{client_tty}' 2>/dev/null)
+  if [[ -z ${CS_ABRE:-} && $sig == "$BOTOES_SIG" ]] && (( SECONDS - BOTOES_QUANDO < 15 )); then return 0; fi
+  BOTOES_SIG=$sig BOTOES_QUANDO=$SECONDS
+  "$BOTOES" sessao "${TMUX%%,*}" "$sess" omega "$@" </dev/null >/dev/null 2>&1 || true
 }
 botoes_some() {
+  BOTOES_SIG=
   abas && [[ -x $BOTOES ]] || return 0
   "$BOTOES" esconde "${TMUX%%,*}" "$(botoes_sessao)" </dev/null >/dev/null 2>&1 || true
 }

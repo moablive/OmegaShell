@@ -13,7 +13,8 @@
 
   // A tela de Sessões (sessoes.js) entra por aqui: o sub_filter do nginx.conf já está no limite de tamanho.
   // logos.js (os logos dos servidores embutidos, gerado por pwa/servidores/gerar-logos.sh) vem antes, em ordem.
-  ['/logos.js', '/sessoes.js'].forEach(function (u) {
+  // rede.js (30/10/2026): conexão que não trava na troca de Wi-Fi.
+  ['/logos.js', '/sessoes.js', '/rede.js'].forEach(function (u) {
     var ss = document.createElement('script'); ss.src = u; ss.async = false;
     (document.head || document.documentElement).appendChild(ss);
   });
@@ -153,7 +154,7 @@
   var versao = null, tecla = 0;
   document.addEventListener('keydown', function () { tecla = Date.now(); }, true);
   function confere() {
-    Promise.all(['/botoes.js', '/inicio.js', '/sessoes.js', '/logos.js'].map(function (u) {
+    Promise.all(['/botoes.js', '/inicio.js', '/sessoes.js', '/logos.js', '/rede.js'].map(function (u) {
       return fetch(u, { method: 'HEAD', cache: 'no-store' }).then(function (r) {
         return r.ok ? (r.headers.get('etag') || r.headers.get('last-modified') || '') : '';
       });
