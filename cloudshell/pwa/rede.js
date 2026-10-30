@@ -11,7 +11,7 @@
 //      aba que volta do segundo plano sem receber nada: recarrega a página. A sessão tmux continua no servidor;
 //      a recarga volta direto ao terminal (sessionStorage cs-recarga, o mesmo do inicio.js), sem a página inicial.
 //   3. Antes de recarregar confere se o servidor responde (HEAD /rede.js); sem rede, mostra a faixa e tenta de
-//      novo com espera crescente (2, 4, 8, até 15 s). Nunca recarrega sem rede: a página sumiria.
+//      novo com espera crescente (2, 4, 8, até 10 s); rede que volta no meio da espera tenta na hora. Nunca recarrega sem rede: a página sumiria.
 //   4. Faixa "Sem rede · reconectando…" por cima da última tela, no lugar da tela congelada.
 (function () {
   'use strict';
@@ -60,20 +60,23 @@
   }
 
   function reconecta(motivo) {
-    if (tentando) return;
+    // Já tentando: rede voltou ou trocou no meio da espera — tenta agora, sem esperar o próximo intervalo.
+    if (tentando) { espera = 2000; tenta(); return; }
     tentando = true;
     mostra(motivo + ' · reconectando…', false);
-    (function tenta() {
+    tenta();
+  }
+  function tenta() {
       clearTimeout(timer);
       if (navigator.onLine === false) {
         mostra('Sem rede · reconecta sozinho quando voltar', true);
-        timer = setTimeout(tenta, espera); espera = Math.min(espera * 2, 15000);
+        timer = setTimeout(tenta, espera); espera = Math.min(espera * 2, 10000);
         return;
       }
       servidorResponde().then(function (ok) {
         if (!ok) {
           mostra('Sem conexão com o servidor · tentando de novo…', true);
-          timer = setTimeout(tenta, espera); espera = Math.min(espera * 2, 15000);
+          timer = setTimeout(tenta, espera); espera = Math.min(espera * 2, 10000);
           return;
         }
         // Chegou um dado enquanto conferia? A conexão voltou sozinha: nada a recarregar.
@@ -82,7 +85,6 @@
         mostra('Reconectando ao terminal…', false);
         location.reload();
       });
-    })();
   }
 
   function vigia() {
