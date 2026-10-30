@@ -22,6 +22,11 @@ trabalhando ao mesmo tempo em projetos diferentes, cada um numa máquina.
 - **Tudo em botões, no estilo do Cmd+Tab do Mac.** Segurar **⌥ Option + Tab** abre o painel da aba atual;
   Tab anda, soltar o ⌥ abre. **⌥ C** abre a paleta de cores da aba e **⌥ G** agrupa abas escolhendo em
   caixinhas.
+- **Estado vindo do próprio Claude, não da tela.** Um hook do Claude Code (`omega/omega-estado`) grava o estado
+  de cada sessão (trabalhando, pedindo permissão, pergunta, pronto), a ferramenta em uso e os tokens gastos; o
+  omega lê isso antes de olhar o terminal. Sessão pedindo permissão ganha **✅ Sim / ✖ Não** no cartão, sem abrir
+  o terminal, e um aviso no Telegram. Arquivo editado pelo Claude abre no editor `fresh` da pasta do projeto, se
+  houver um aberto. (Ideias do [agent-dashboard](https://github.com/bjornjee/agent-dashboard).)
 - **Fecha uma sessão de IA sem perder trabalho.** Ao encerrar, o Claude recebe `/quit` e o servidor roda o
   fechamento da sessão (auditoria de segurança, commit e push do que ficou, aviso no Telegram).
 
