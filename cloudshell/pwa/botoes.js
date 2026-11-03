@@ -366,7 +366,9 @@
     sobMouse();
     marca();
     var c = campo();
-    if (c && !segura) setTimeout(function () { c.focus(); if (c.value) c.select(); }, 0);
+    // Campo de texto: foco nele sempre (03/11/2026, pedido do dono: aberto pelo ⌥ Tab com o Option ainda apertado, o
+    // foco ficava no terminal e a 1ª letra fechava o painel e caía na pergunta em texto do tmux).
+    if (c) setTimeout(function () { c.focus(); if (c.value) c.select(); }, 0);
   }
 
   // Painel aberto (ou redesenhado) embaixo do mouse parado: o item sob o cursor vira o escolhido, para
@@ -462,6 +464,8 @@
     // hora — a paleta nem aparecia). O C de novo com o ⌥ ainda apertado é que passa a valer o soltar para aplicar.
     if (pede || m.abre) { pede = false; aberto = true; }
     else if (!mesmo) aberto = segura = false;
+    // Menu com campo de texto não fica "segurado": soltar o Option redesenharia o painel e apagaria o que já foi digitado.
+    if (m.i.some(function (it) { return it.k === TEXTO; })) segura = false;
     if (aberto) desenha();
     mostra();
     return true;
@@ -488,7 +492,7 @@
     // ⌥ ainda apertado: Enter entra no escolhido e Esc cancela (30/10/2026) — não precisa soltar antes.
     if (aberto && e.altKey && !e.metaKey && !e.ctrlKey && (e.key === 'Enter' || e.key === 'Escape')) {
       para(e);
-      if (e.key === 'Enter') { sobMouse(); escolhe(sel); } else cancela();
+      if (e.key === 'Enter') { var ca = campo(); if (ca) envia(ca); else { sobMouse(); escolhe(sel); } } else cancela();
       return;
     }
     if (!aberto || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -496,8 +500,14 @@
     if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'Tab') anda(k === 'Tab' && e.shiftKey ? -1 : 1);
     else if (k === 'ArrowLeft' || k === 'ArrowUp') anda(-1);
     else if (k === 'Escape') cancela();
-    else if (k === 'Enter') escolhe(sel);
-    else {
+    else if (k === 'Enter') { var ce = campo(); if (ce) envia(ce); else escolhe(sel); }
+    else if (campo() && (k.length === 1 || k === 'Backspace')) {
+      // Painel com campo de texto e o foco fora dele: a tecla vai para o campo, o painel fica (03/11/2026).
+      var cc = campo(), tudo = cc.selectionStart === 0 && cc.selectionEnd === cc.value.length;
+      cc.focus();
+      cc.value = k === 'Backspace' ? (tudo ? '' : cc.value.slice(0, -1)) : (tudo ? '' : cc.value) + k;
+      cc.dispatchEvent(new Event('input'));
+    } else {
       // Digitou outra coisa: o painel sai e a tecla vai para o terminal (num menu do tmux, escolhe nele).
       if (k.length === 1 || k === 'Backspace') { if (menu.tipo === 'tmux') some(); else esconde(); }
       return;
