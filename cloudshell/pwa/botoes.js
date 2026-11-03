@@ -307,6 +307,9 @@
           b = document.createElement('input');
           b.className = 'i'; b.type = 'text'; b.maxLength = 40; b.spellcheck = false;
           b.autocomplete = 'off'; b.placeholder = it.r || ''; if (it.d) b.title = it.d;
+          // Renomear (aba pelo ⌥ R ou sessão pelo r do omega, 03/11/2026, pedido do dono): o campo já vem com o nome
+          // atual, todo selecionado — digitar troca, as setas editam.
+          if (menu.id === 'renomear' && NOME.test(it.r || '')) b.value = it.r;
           b.addEventListener('input', function () { b.classList.toggle('ruim', !NOME.test(b.value)); });
           l.appendChild(b);
           return;
@@ -363,7 +366,7 @@
     sobMouse();
     marca();
     var c = campo();
-    if (c && !segura) setTimeout(function () { c.focus(); }, 0);
+    if (c && !segura) setTimeout(function () { c.focus(); if (c.value) c.select(); }, 0);
   }
 
   // Painel aberto (ou redesenhado) embaixo do mouse parado: o item sob o cursor vira o escolhido, para
@@ -699,6 +702,13 @@
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
       anda(e.shiftKey ? -1 : 1);
       if (!segura) { segura = true; desenha(); }
+    }, true);
+    // ⌥ R (03/11/2026, pedido do dono: "ao lado do ⌥ C"): renomear a aba — o tmux (User8) abre o campo no painel.
+    // Pelo e.code: no Mac o Option+R vira ®. Com o painel aberto não faz nada (o campo pode estar recebendo texto).
+    window.addEventListener('keydown', function (e) {
+      if (e.code !== 'KeyR' || !e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return;
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+      if (!aberto) digita('\x1b[91~');
     }, true);
     document.addEventListener('keyup', solta, true);
     window.addEventListener('blur', function () { segura = false; });

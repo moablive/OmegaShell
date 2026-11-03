@@ -21,6 +21,8 @@
 #                                                   com elas ou põe num grupo que já existe; a seleção fica em @juntar
 #   abas.sh juntar_ok  <socket> <@janela>           cria o grupo com o nome digitado (@juntar_nome)
 #   abas.sh juntar_por <socket> <@janela> <grupo>   põe as marcadas no grupo
+#   abas.sh renomear <socket> <@janela> <cliente>   o ✏️ Renomear… e o ⌥ R (03/11/2026): pede o nome no campo do painel
+#   abas.sh renomeado  <socket> <@janela>           grava o apelido @aba_nome que o renomear deixou em @renome
 # Todo menu daqui sai também em botões no navegador (botoes.sh, visual do Cmd+Tab, 26/10/2026): o
 # clique num botão só digita a tecla do item, com o menu do tmux aberto atrás.
 # Só o id da janela (@N) passa pelos comandos: o da sessão ($N) seria expandido pelo sh do run-shell.
@@ -51,6 +53,8 @@ nova='new-window -n nova-sessao -e OMEGA_ABAS=1 "/usr/local/bin/omega nova"'
 # Nome do grupo na caixa de texto do painel (28/10/2026, pedido do dono: no layout novo, não só na barra do tmux):
 # os botões vêm junto com o command-prompt; a caixa digita o nome e o Enter nele, e o Esc dela cancela o prompt.
 caixa_grupo() { printf "run-shell \"CS_ABRE=1 %s/botoes.sh cliente %s tmux nome-grupo 'Novo grupo · digite o nome' 'g|✎|nome do grupo|letras, números, _ . - e até 15|✎'\" ; " "$lib" "$cliente"; }
+# Nome que a aba mostra: o apelido (@aba_nome, do ✏️ Renomear… / ⌥ R), senão o nome da janela.
+NOMEF='#{?@aba_nome,#{@aba_nome},#W}'
 pergunta() { printf "run-shell \"CS_ABRE=1 %s/botoes.sh cliente %s tmux confirma '%s' 'y|✅|Sim||y' 'y|↩️|Não||n'\"" "$lib" "$cliente" "${1//[\'\"\\\$#;]/}"; }
 
 # Marca a 1ª aba de cada grupo (@g_ini/@g_n) e tira a marca das outras.
@@ -158,8 +162,8 @@ case $acao in
     [[ -z $aberto || $aberto == @(mover|tamanho|cor) ]] || exit 0
     [[ -z $para || $para == [edcf] ]] || exit 0
     base="$lib/abas.sh painel $sock $w $cliente"
-    titulo="aba #W"
-    janela=$(t display -p -t "$w" '#W')
+    titulo="aba $NOMEF"
+    janela=$(t display -p -t "$w" "$NOMEF")
     jfixa=$(t display -p -t "$w" '#{@jfixa}') pfixa=$(t display -p -t "$w" '#{@pfixa}')
     # ⏻ Encerrar aba (28/10/2026, pedido do dono: diferente do ✕ Fechar shell, que só fecha o painel e, numa aba de
     # sessão, a aba volta): aba de sessão → "omega encerrar <conta> <sessão>" numa aba própria (a pergunta da tecla d:
@@ -210,7 +214,7 @@ case $acao in
           bt+=("cor|#$ch|$cn||$ck")   # ícone = a cor: a página desenha uma esfera dela
         done
         btn cor "cor da aba $janela" "${bt[@]}" 'cor|◯|Padrão|sem cor|p'
-        t display-menu -O -M -c "$cliente" -T '#[align=centre]cor da aba #W' -x R -y S -- \
+        t display-menu -O -M -c "$cliente" -T "#[align=centre]cor da aba $NOMEF" -x R -y S -- \
           "${args[@]}" '' 'Padrão' p "set -wu -t $w @cor"
         exit 0 ;;
     esac
@@ -249,7 +253,7 @@ case $acao in
       ini=; fim=
       (( p == 0 )) && ini=-
       (( p == n - 1 )) && fim=-
-      titulo="aba #W ($((p + 1)) de $n)"
+      titulo="aba $NOMEF ($((p + 1)) de $n)"
       # Teclas < > Home End (as letras e d c f já são de Dividir e Cor no menu; as setas ← → o menu usa).
       mov=("⇄ Mover ▾" m "run-shell \"$base\""
            "${ini}     ← Para a esquerda" "<"   "run-shell \"$base mover e\""
@@ -263,7 +267,7 @@ case $acao in
     # a última usada primeiro — ⌥ Tab e soltar volta para ela —, depois as outras na ordem da barra;
     # teclas 1–9, e O e S para a omega e a sh no ⌥ Tab (as minúsculas são das ações).
     mabas=() bfix=() mfix=() k=0
-    while IFS='|' read -r ultima j jn jc jf; do
+    while IFS='|' read -r ultima j jn jc jf ja; do
       [[ $j == "$w" ]] && continue
       case $jn in
         # As fixas saíram da lista do ☰ menu (27/10/2026, pedido do dono: ficam na página inicial). Pelo ⌥ Tab
@@ -282,8 +286,8 @@ case $acao in
       esac
       # A seção "abas" saiu dos botões (28/10/2026, pedido do dono: repete a barra do topo e a página inicial);
       # fica só no menu em texto do tmux.
-      mabas+=("$ic ${jn//[\'\"\\\$#;]/}" "$jk" "select-window -t $j")
-    done < <(t list-windows -t "$s" -F '#{window_last_flag}|#{window_id}|#{window_name}|#{pane_current_command}|#{@jfixa}' | sort -t'|' -k1,1nr -s)
+      mabas+=("$ic ${ja//[\'\"\\\$#;]/}" "$jk" "select-window -t $j")
+    done < <(t list-windows -t "$s" -F "#{window_last_flag}|#{window_id}|#{window_name}|#{pane_current_command}|#{@jfixa}|$NOMEF" | sort -t'|' -k1,1nr -s)
     mabas=("${mfix[@]}" "${mabas[@]}")
     (( ${#mabas[@]} )) && mabas+=("")
     btn painel "aba $janela" "${bfix[@]}" 'janela|🖥️|Nova sessão…|servidor e nome|N' \
@@ -301,7 +305,7 @@ case $acao in
       "🖥️ Nova sessão… (servidor e nome)" N "$nova" \
       "+ Nova janela (shell aqui)" n 'new-window -c "#{pane_current_path}"' \
       "⫼ Dividir"     d 'split-window -h -c "#{pane_current_path}"' \
-      "#{?@jfixa,-,}✏️ Renomear…" r "command-prompt -I '#W' -p 'nome da aba:' \"rename-window -t $w \\\"%%%\\\"\"" \
+      "#{?@jfixa,-,}✏️ Renomear…" r "run-shell \"$lib/abas.sh renomear $sock $w $cliente\"" \
       "#{?@pfixa,-,}✕ Fechar shell" x "$(pergunta "fechar este shell ($janela)?") ; confirm-before -p \"fechar este shell (#W)? y/n\" kill-pane" \
       "#{?@jfixa,-,}⏻ Encerrar aba" e "$enc_cmd" \
       "#{?@jfixa,-,}✎ Abrir projeto no editor (fresh)" p "$ed_cmd" \
@@ -345,7 +349,7 @@ case $acao in
       else marca=${jg:+▦ $jg}; caixa='☐'; fi
       bt+=("abas|$cor|${jn//|/}|$marca|$tk")
       itens+=("$caixa ${jn//[\'\"\\\$#;]/}" "$tk" "run-shell \"$base marca $j\"")
-    done < <(t list-windows -t "$s" -F '#{window_id}|#{window_name}|#{@cor}|#{@grupo}|#{@jfixa}')
+    done < <(t list-windows -t "$s" -F "#{window_id}|$NOMEF|#{@cor}|#{@grupo}|#{@jfixa}")
     if [[ $novo == '|' ]]; then t set -u -t "$w" @juntar; else t set -t "$w" @juntar "$novo"; fi
     [[ -n $op ]] && sleep 0.2   # reaberto por um clique no próprio menu (ver o ⇄ Mover)
     tem=-; (( n )) && tem=
@@ -384,6 +388,31 @@ case $acao in
     t set -u -t "$w" @juntar
     arruma "$s"
     t display-message -d 1500 "grupo $g: $n aba(s)" ;;
+  renomear)
+    # ✏️ Renomear… (☰ menu, Ctrl-b , e botão direito) e ⌥ R (03/11/2026, pedido do dono: o nome era pedido na linha
+    # do tmux, fora do painel, e o rename-window tirava o awlsrv-/bf- do nome — a aba perdia o logo do servidor, e
+    # na aba de sessão o omega voltava o nome da sessão). Agora: campo ✎ no painel, já com o nome atual, junto com o
+    # command-prompt (como o Novo grupo…); o que se digita vira o apelido @aba_nome e o nome da janela não muda.
+    cliente=${4:-}
+    [[ $cliente =~ ^/dev/pts/[0-9]+$ ]] || exit 0
+    if [[ -n $(t display -p -t "$w" '#{@jfixa}') ]]; then t display-message "a aba $(t display -p -t "$w" '#W') é fixa: o nome não muda"; exit 0; fi
+    atual=$(t display -p -t "$w" '#{?@aba_nome,#{@aba_nome},#{s/^(awlsrv|bf|mac)-//:window_name}}')
+    btn renomear "renomear a aba · digite o novo nome" \
+      "aba|✎|${atual//|/}|letras, números, _ . - e até 40 · vazio volta ao nome de origem|✎"
+    t command-prompt -t "$cliente" -p 'novo nome da aba:' "set -w -t $w @renome \"%%%\" ; run-shell \"$lib/abas.sh renomeado $sock $w\"" ;;
+  renomeado)
+    # O command-prompt gravou o que foi digitado (%%%, aspas escapadas) em @renome: conferido aqui antes de ir para
+    # a barra. awlsrv-/bf-/mac- digitado à mão sai (o logo do servidor já vem do nome da janela).
+    v=$(t show -wv -t "$w" @renome 2>/dev/null || true); t set -wu -t "$w" @renome
+    [[ -z $(t display -p -t "$w" '#{@jfixa}') ]] || exit 0
+    v=$(sed -E 's/^(awlsrv|bf|mac)-//' <<< "$v")
+    if [[ -z $v ]]; then
+      t set -wu -t "$w" @aba_nome; t display-message -d 1200 "aba com o nome de origem: $(t display -p -t "$w" '#W')"
+    elif [[ $v =~ ^[A-Za-z0-9._-]{1,40}$ ]]; then
+      t set -w -t "$w" @aba_nome "$v"; t display-message -d 1200 "aba renomeada: $v"
+    else
+      t display-message "nome inválido (letras, números, _ . - e até 40)"
+    fi ;;
   menu)
     cliente=${4:-}
     [[ $cliente =~ ^/dev/pts/[0-9]+$ ]] || exit 0
@@ -426,7 +455,7 @@ case $acao in
       if [[ -z ${itens[i]} ]]; then args+=(""); else args+=("${itens[i]}" "${itens[i+1]}" "${itens[i+2]}"); fi
       i=$((i + 3))
     done
-    btn grupo "grupo da aba $(t display -p -t "$w" '#W')" "${bt[@]}"
-    t display-menu -O -M -c "$cliente" -T "#[align=centre]grupo da aba #W" -x R -y S "${args[@]}" ;;
+    btn grupo "grupo da aba $(t display -p -t "$w" "$NOMEF")" "${bt[@]}"
+    t display-menu -O -M -c "$cliente" -T "#[align=centre]grupo da aba $NOMEF" -x R -y S "${args[@]}" ;;
 esac
 exit 0
