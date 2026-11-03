@@ -1,0 +1,3 @@
+[submodule "auditoria"]
+	path = auditoria
+	url = https://github.com/moablive/OmegaShell-auditoria.git

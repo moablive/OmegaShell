@@ -78,6 +78,7 @@ cloudshell/
   pwa/       botoes.js (painel ⌥ Tab), inicio.js (página inicial), sessoes.js (Sessões/Scripts), ícones, logos
   host/      lado do servidor: tmux.conf, abas.sh (menus), botoes.sh (OSC 7717), sessao.sh, fixas.sh
 omega/omega  o gerenciador de sessões, IA e scripts
+auditoria/   submódulo privado (link dá 404 para quem não é o dono, de propósito)
 ```
 
 ## Observações
@@ -88,6 +89,9 @@ omega/omega  o gerenciador de sessões, IA e scripts
 - O login usa o [LoginHUB](https://github.com/moablive/LoginHUB), o login central da minha suíte
   [LifeBusinessSuit](https://github.com/moablive/LifeBusinessSuit).
 - Comentários e textos em português.
+- `auditoria/` é um submódulo **privado**: o registro de cada script de manutenção que rodou nos meus servidores
+  (o próprio script, OK/FALHOU, duração, quem rodou), gravado no git automaticamente ao fim de cada execução.
+  Fica fechado porque mostra a infraestrutura dos servidores; o link dele dá 404 para quem não é o dono.
 
 ---
 
