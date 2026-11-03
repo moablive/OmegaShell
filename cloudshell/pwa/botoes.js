@@ -383,6 +383,26 @@
     if (!menu) aberto = segura = false;
     raiz.classList.toggle('on', aberto);
     volta.classList.toggle('on', !aberto);
+    capa(aberto && menu.tipo === 'tmux' && menu.i.some(function (it) { return it.k === TEXTO; }));
+  }
+
+  // Capa da barra (03/11/2026, pedido do dono: "a tela de fundo em amarelo legado ainda continua"): o campo ✎ de um
+  // menu do tmux (renomear, nome do grupo) digita numa pergunta do tmux (command-prompt) aberta atrás, que aparece em
+  // amarelo na barra de abas, por baixo do véu. Enquanto o campo está aberto, as duas linhas da barra ficam cobertas
+  // na cor dela; ao fechar, a capa sai um pouco depois, quando o tmux já recebeu o Enter e redesenhou a barra.
+  var capaEl = null, capaFim = 0;
+  function capa(on) {
+    var tela = t.element && t.element.querySelector('.xterm-screen');
+    if (!tela || !t.rows) return;
+    if (!capaEl) { capaEl = document.createElement('div'); capaEl.id = 'csb-capa'; }
+    if (capaEl.parentNode !== tela) tela.appendChild(capaEl);
+    clearTimeout(capaFim);
+    if (on) {
+      capaEl.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:' + (2 * tela.clientHeight / t.rows) +
+        'px;background:#14141f;z-index:12;pointer-events:none';
+    } else if (capaEl.style.display !== 'none') {
+      capaFim = setTimeout(function () { capaEl.style.display = 'none'; }, 400);
+    }
   }
 
   function some() { menu = null; bruto = ''; mostra(); avisa(null); }

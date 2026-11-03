@@ -19,6 +19,7 @@
 #      omega rodar x.sh roda um ~/sh nesta tela (a aba que o sh abre no CloudShell)
 #      omega entrar c s entra na sessão tmux s da conta c (a aba que o menu abre no CloudShell)
 #      omega nova       nova sessão (servidor, Claude ou terminal, nome) — a aba do 🖥️ Nova sessão… do CloudShell
+#      omega renomear c s novo  troca o nome da sessão s (nome ou $id) da conta c, sem perguntas (✏️ Renomear… / ⌥ R)
 #      omega --help     esta ajuda
 set -uo pipefail
 
@@ -1132,6 +1133,22 @@ case ${1:-} in
       printf '\e[33m✗ a sessão %s (%s) não está na lista (já fechou?)\e[0m\n' "$3" "$2"
       read -rp "Enter = fechar a aba " _ || true
     else encerrar "$2" "$3" "$ia" "$st" "$att"; botoes_some; fi ;;
+  # Renomear sem perguntas (03/11/2026, pedido do dono: o ✏️ Renomear… / ⌥ R numa aba de sessão trocava só o nome da
+  # aba, e a tela de Sessões e o Início seguiam com o nome velho). Chamado pelo abas.sh renomeado do CloudShell com o
+  # id da sessão ($N, gravado na aba em @omega_sid): troca o nome no servidor dela e acerta o nome das abas.
+  renomear)
+    c=${2:-} alvo=${3:-} novo=${4:-}
+    contem "$c" "${CONTAS[@]}" "${REMOTOS[@]}" && { [[ $alvo =~ ^\$[0-9]+$ ]] || nome_ok "$alvo"; } \
+      || { echo "uso: omega renomear <conta|bf|mac> <sessão|\$id> <novo>" >&2; exit 2; }
+    [[ $novo =~ ^[A-Za-z0-9_-]{1,40}$ ]] || { echo "nome inválido: '$novo' (letras, números, - e _)" >&2; exit 2; }
+    [[ $alvo == \$* ]] || alvo="=$alvo:"
+    velho=$(tm "$c" display -p -t "$alvo" '#{session_name}' </dev/null 2>/dev/null) || { echo "sessão não encontrada" >&2; exit 1; }
+    [[ $velho == "$novo" ]] && exit 0
+    if tm "$c" has-session -t "=$novo" </dev/null 2>/dev/null; then echo "já existe '$novo' em $(servidor_de "$c")" >&2; exit 1; fi
+    abas_sincroniza
+    tm "$c" rename-session -t "$alvo" "$novo" </dev/null || { echo "não renomeei $velho" >&2; exit 1; }
+    abas_sincroniza
+    echo "$velho → $novo" ;;
   # Painel dividido da aba com o fresh no projeto da sessão (✎ do ⌥ Tab).
   editor)
     contem "${2:-}" "${CONTAS[@]}" "${REMOTOS[@]}" && nome_ok "${3:-}" || { echo "uso: omega editor <conta|bf|mac> <sessão>" >&2; exit 2; }

@@ -22,7 +22,7 @@
 #   abas.sh juntar_ok  <socket> <@janela>           cria o grupo com o nome digitado (@juntar_nome)
 #   abas.sh juntar_por <socket> <@janela> <grupo>   põe as marcadas no grupo
 #   abas.sh renomear <socket> <@janela> <cliente>   o ✏️ Renomear… e o ⌥ R (03/11/2026): pede o nome no campo do painel
-#   abas.sh renomeado  <socket> <@janela>           grava o apelido @aba_nome que o renomear deixou em @renome
+#   abas.sh renomeado  <socket> <@janela>           aba de sessão: renomeia a sessão (omega renomear); comum: apelido @aba_nome
 # Todo menu daqui sai também em botões no navegador (botoes.sh, visual do Cmd+Tab, 26/10/2026): o
 # clique num botão só digita a tecla do item, com o menu do tmux aberto atrás.
 # Só o id da janela (@N) passa pelos comandos: o da sessão ($N) seria expandido pelo sh do run-shell.
@@ -397,19 +397,34 @@ case $acao in
     [[ $cliente =~ ^/dev/pts/[0-9]+$ ]] || exit 0
     if [[ -n $(t display -p -t "$w" '#{@jfixa}') ]]; then t display-message "a aba $(t display -p -t "$w" '#W') é fixa: o nome não muda"; exit 0; fi
     atual=$(t display -p -t "$w" '#{?@aba_nome,#{@aba_nome},#{s/^(awlsrv|bf|mac)-//:window_name}}')
-    btn renomear "renomear a aba · digite o novo nome" \
-      "aba|✎|${atual//|/}|letras, números, _ . - e até 40 · vazio volta ao nome de origem|✎"
+    if [[ -n $(t display -p -t "$w" '#{@omega_sid}') ]]; then
+      btn renomear "renomear a sessão · digite o novo nome" "sessão|✎|${atual//|/}|letras, números, - e _ · troca no servidor da sessão|✎"
+    else
+      btn renomear "renomear a aba · digite o novo nome" "aba|✎|${atual//|/}|letras, números, _ . - e até 40 · vazio volta ao nome de origem|✎"
+    fi
     t command-prompt -t "$cliente" -p 'novo nome da aba:' "set -w -t $w @renome \"%%%\" ; run-shell \"$lib/abas.sh renomeado $sock $w\"" ;;
   renomeado)
     # O command-prompt gravou o que foi digitado (%%%, aspas escapadas) em @renome: conferido aqui antes de ir para
     # a barra. awlsrv-/bf-/mac- digitado à mão sai (o logo do servidor já vem do nome da janela).
+    # Aba de sessão (@omega_conta/@omega_sid, 03/11/2026, pedido do dono: a tela de Sessões e o Início mostravam o
+    # nome velho): troca o nome da SESSÃO no servidor dela (omega renomear), e o nome da aba vem junto (bf-<novo>).
+    # Aba comum: o apelido @aba_nome. Sem mensagem amarela do tmux no sucesso: a barra já mostra o nome novo.
     v=$(t show -wv -t "$w" @renome 2>/dev/null || true); t set -wu -t "$w" @renome
     [[ -z $(t display -p -t "$w" '#{@jfixa}') ]] || exit 0
     v=$(sed -E 's/^(awlsrv|bf|mac)-//' <<< "$v")
-    if [[ -z $v ]]; then
-      t set -wu -t "$w" @aba_nome; t display-message -d 1200 "aba com o nome de origem: $(t display -p -t "$w" '#W')"
+    conta=$(t display -p -t "$w" '#{@omega_conta}') sid=$(t display -p -t "$w" '#{@omega_sid}')
+    if [[ -n $conta && $sid =~ ^\$[0-9]+$ ]]; then
+      [[ -n $v ]] || exit 0
+      if ! [[ $v =~ ^[A-Za-z0-9_-]{1,40}$ ]]; then t display-message "nome inválido para sessão (letras, números, - e _)"; exit 0; fi
+      if erro=$(OMEGA_ABAS=1 TMUX="$sock,0,0" /usr/local/bin/omega renomear "$conta" "$sid" "$v" 2>&1 </dev/null); then
+        t set -wu -t "$w" @aba_nome
+      else
+        t display-message "não renomeei: ${erro//[#]/}"
+      fi
+    elif [[ -z $v ]]; then
+      t set -wu -t "$w" @aba_nome
     elif [[ $v =~ ^[A-Za-z0-9._-]{1,40}$ ]]; then
-      t set -w -t "$w" @aba_nome "$v"; t display-message -d 1200 "aba renomeada: $v"
+      t set -w -t "$w" @aba_nome "$v"
     else
       t display-message "nome inválido (letras, números, _ . - e até 40)"
     fi ;;
