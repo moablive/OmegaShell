@@ -20,8 +20,8 @@ trabalhando ao mesmo tempo em projetos diferentes, cada um numa máquina.
   entre eles ("depois de x.sh"), execução em ordem (modo automático), saída em aba própria (verde = ok,
   vermelho = falhou) e arquivamento automático do que terminou bem.
 - **Tudo em botões, no estilo do Cmd+Tab do Mac.** Segurar **⌥ Option + Tab** abre o painel da aba atual;
-  Tab anda, soltar o ⌥ abre. **⌥ C** abre a paleta de cores da aba e **⌥ G** agrupa abas escolhendo em
-  caixinhas.
+  Tab anda, soltar o ⌥ abre. **⌥ C** abre a paleta de cores da aba, **⌥ R** renomeia a aba (campo no painel, com o
+  nome atual; o logo do servidor fica) e **⌥ G** agrupa abas escolhendo em caixinhas.
 - **Estado vindo do próprio Claude, não da tela.** Um hook do Claude Code (`omega/omega-estado`) grava o estado
   de cada sessão (trabalhando, pedindo permissão, pergunta, pronto), a ferramenta em uso e os tokens gastos; o
   omega lê isso antes de olhar o terminal. Sessão pedindo permissão ganha **✅ Sim / ✖ Não** no cartão, sem abrir
