@@ -15,7 +15,7 @@ conta=${SSH_ORIGINAL_COMMAND:-}
 origem=${SSH_CONNECTION:-}; origem=${origem%% *}
 if ! [[ $conta =~ ^[0-9]{1,12}$ ]]; then
   logger -t cloudshell "recusado: id de conta inválido '$(printf '%s' "$conta" | tr -cd '[:alnum:]_-' | cut -c1-20)' de ${origem:--}" || true
-  echo "CloudShell: sessão inválida (sem conta do LoginHUB)." >&2
+  echo "OmegaShell: sessão inválida (sem conta do LoginHUB)." >&2
   exit 1
 fi
 sessao="cs-$conta"

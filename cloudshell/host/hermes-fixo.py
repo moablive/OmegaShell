@@ -14,7 +14,7 @@ sys.path.insert(0, "/usr/local/lib/hermes-agent")
 from hermes_cli.cli_loops_mixin import CLILoopsMixin  # noqa: E402
 from hermes_cli.cli_tui_mixin import CLITuiMixin  # noqa: E402
 
-AVISO = "aba fixa do CloudShell: o chat do Conselho não fecha aqui"
+AVISO = "aba fixa do OmegaShell: o chat do Conselho não fecha aqui"
 
 
 def _aviso():

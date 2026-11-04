@@ -559,7 +559,7 @@ sh_auto() {
   echo; printf '\e[1m▶ Resumo do automático\e[0m\n%s' "$corpo"
   grav=info; (( ${#falhas[@]} + ${#pulados[@]} + sobra )) && grav=aviso
   printf '%s' "$corpo" | /usr/local/bin/awlnotify --categoria jobs --gravidade "$grav" \
-    "Automático do sh (CloudShell): ${#oks[@]} OK, ${#falhas[@]} falharam, ${#pulados[@]} pulado(s)$( (( sobra )) && printf ', %d por rodar' "$sobra")" >/dev/null \
+    "Automático do sh (OmegaShell): ${#oks[@]} OK, ${#falhas[@]} falharam, ${#pulados[@]} pulado(s)$( (( sobra )) && printf ', %d por rodar' "$sobra")" >/dev/null \
     || echo "(aviso do resumo não saiu)"
   pausa
 }
@@ -988,7 +988,7 @@ menu() {
       a|A) ;;
       n|N) nova_sessao ;;
       # No CloudShell o sh digitado vai para a aba fixa sh.
-      s|S|sh|SH) if abas; then command tmux select-window -t ':=sh' 2>/dev/null || MENU_MSG="a aba sh não está aberta (reabra o CloudShell)"; else menu_sh; fi ;;
+      s|S|sh|SH) if abas; then command tmux select-window -t ':=sh' 2>/dev/null || MENU_MSG="a aba sh não está aberta (reabra o OmegaShell)"; else menu_sh; fi ;;
       [yYxX]*)
         local op=${esc:0:1} num=${esc:1}
         [[ -n $num ]] || { MENU_MSG="use y<nº> (Sim) ou x<nº> (Não): y1 responde à sessão 1"; continue; }
