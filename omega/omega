@@ -657,7 +657,7 @@ abas() { [[ ${OMEGA_ABAS:-} == 1 && -n ${TMUX:-} ]]; }
 # Sessões e Scripts e os painéis de botões, então o omega não escreve menu, lista de teclas nem pergunta no terminal
 # — só lê a tecla que o botão digita. Os avisos (MENU_MSG, SH_MSG) vão para a tela, no item "aviso". Fora do
 # CloudShell (terminal comum, omega do Mac), o texto de sempre.
-calado() { abas || [[ ${TMUX%%,*} == */cloudshell ]]; }
+calado() { abas || [[ ${TMUX:-} == */cloudshell,* ]]; }
 diz() { calado || printf "$@"; }
 # pergunta <variável> <prompt>: no OmegaShell lê sem eco e sem prompt (quem digita é o painel).
 pergunta() {
