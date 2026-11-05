@@ -68,6 +68,8 @@
     'font:600 10px ui-monospace,Menlo,monospace;line-height:16px;color:#14141f;background:rgba(179,136,255,.9)}',
     '#css .gr.lista{grid-template-columns:1fr;gap:6px}',
     '#css .sub{margin:12px 2px 6px;font-size:11.5px;font-weight:600;color:#b388ff;letter-spacing:.03em}',
+    // Aviso do omega (05/11/2026): o resultado da última ação, que antes saía em texto no terminal.
+    '#css .aviso{margin:0 0 6px;padding:10px 14px;border-radius:12px;background:rgba(255,212,59,.10);border:1px solid rgba(255,212,59,.35);color:#ffe28a;font-size:13px}',
     '#css .vazio{font-size:13px;color:rgba(242,242,247,.45);padding:6px 2px}',
     '#css .rod{margin-top:16px;text-align:center;font-size:11px;color:rgba(242,242,247,.4)}',
     '#css .num{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:8px 16px;border-radius:12px;',
@@ -79,10 +81,10 @@
   var MODO = {
     menu: { titulo: 'Sessões', conta: function (n) { return n + (n === 1 ? ' aberta' : ' abertas'); }, lista: false,
             un: ['sessão', 'sessões'], vazio: 'nenhuma sessão aberta', letras: /^[nrda]$/i,
-            rod: 'nº ou ← → e ⏎ abre · n nova · r renomeia · d fecha · ✅/✖ no cartão responde · esc lista em texto · ⌥ Tab menus' },
+            rod: 'nº ou ← → e ⏎ abre · n nova · r renomeia · d fecha · ✅/✖ no cartão responde · esc início · ⌥ Tab menus' },
     sh:   { titulo: 'Scripts ~/sh', conta: function (n) { return n + (n === 1 ? ' script' : ' scripts'); }, lista: true,
             un: ['script', 'scripts'], vazio: 'nada para rodar', letras: /^[takx]$/i,
-            rod: 'nº ou ↑ ↓ e ⏎ roda · t automático · a atualiza · k senha do sudo · x exclui · esc lista em texto · ⌥ Tab menus' }
+            rod: 'nº ou ↑ ↓ e ⏎ roda · t automático · a atualiza · k senha do sudo · x exclui · esc início · ⌥ Tab menus' }
   };
   var REUSO = / · ↻ reutilizáveis$/;
 
@@ -152,9 +154,13 @@
     });
     acao('⌂ Início', null, function () { var v = document.getElementById('csi-v'); if (v) v.click(); });
 
+    // Aviso do omega (MENU_MSG / SH_MSG, item "aviso"): o resultado da última ação (sessão aberta, fechada, erro).
+    menu.i.forEach(function (it) { if (it.e === 'aviso' && it.r) tag('div', 'aviso', it.r, w); });
+
     // Blocos: os servidores na ordem do omega (cabeçalhos "servidor"), e os grupos sem cabeçalho (outra conta) depois.
     var blocos = [], por = {};
     menu.i.forEach(function (it) {
+      if (it.e === 'aviso') return;
       if (it.e === 'servidor' && !por[it.g]) { por[it.g] = { nome: it.r, st: it.d, s: [], r: [] }; blocos.push(por[it.g]); }
     });
     lista.forEach(function (it) {

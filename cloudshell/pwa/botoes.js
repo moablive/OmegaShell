@@ -289,7 +289,7 @@
     painel.appendChild(tt);
     var grupos = [], ult = null;
     menu.i.forEach(function (it, n) {
-      if (it.e === 'servidor') return;   // cabeçalho de servidor: só a tela de Sessões desenha
+      if (it.e === 'servidor' || it.e === 'aviso') return;   // cabeçalho de servidor e aviso: só a tela de Sessões desenha
       if (!ult || ult.g !== it.g) { ult = { g: it.g, n: [] }; grupos.push(ult); }
       ult.n.push(n);
     });
