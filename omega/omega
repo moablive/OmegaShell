@@ -301,21 +301,22 @@ entrar() {
 # o Claude, o Gemini ou só o terminal; sugere um nome livre (claude, claude-2… / gemini… / term, term-2…). No CloudShell
 # a sessão abre numa aba nova com o nome dela.
 nova_sessao() {
-  local srv c tipo prog nome sug base k=1 i
+  local srv=${1:-} c tipo prog nome sug base k=1 i   # $1 = nº do servidor (o + do cabeçalho na tela de Sessões)
   if calado; then limpa; else echo; fi
   local -a bt=()
   # ◀ ▶ no painel (07/11/2026, pedido do dono: "esse também precisa ser organizável"): ou<n>/ob<n> mudam a ordem
   # (servidor_ajusta, a mesma da tela de Sessões) e o painel volta na ordem nova. Ícone "srv:<servidor>": a página
   # tira o logo pelo servidor, e o rótulo é o nome na tela.
-  while :; do
+  while [[ -z $srv ]]; do
     bt=()
     for i in "${!BLOCOS[@]}"; do diz '  %s) %s\n' $((i + 1)) "$(nome_srv "${BLOCOS[i]}")"; bt+=("|srv:${BLOCOS[i]}|$(nome_srv "${BLOCOS[i]}")||$((i + 1))⏎"); done
     botoes_abre nova-servidor "Nova sessão · servidor" "${bt[@]}"
     pergunta srv "Servidor da nova sessão (Enter = 1, ou<n>/ob<n> = sobe/desce): " || return
+    [[ -z $srv ]] && { srv=1; break; }   # Enter = 1
     [[ $srv =~ ^[oO]([ubUB])([0-9]+)$ ]] || break
     servidor_ajusta "${BASH_REMATCH[1],,}" "${BASH_REMATCH[2]}" ''
+    srv=
   done
-  srv=${srv:-1}
   [[ $srv =~ ^[0-9]+$ ]] && (( srv >= 1 && srv <= ${#BLOCOS[@]} )) || { MENU_MSG="Servidor inválido: '$srv'"; return; }
   c=${BCONTA[srv - 1]}
   diz '\n  1) Claude\n  2) Gemini\n  3) só o terminal\n'
@@ -785,11 +786,12 @@ tela_menu_botoes() {
     # g = o servidor (a página tira o logo dele), rótulo = o nome na tela (APELIDO).
     cab+=("${BLOCOS[i]}|servidor|$(nome_srv "${BLOCOS[i]}")|$est|-")
   done
-  # 🧾 Scripts ~/sh (28/10/2026, pedido do dono: da tela de Sessões e do ⌥ Tab da aba omega se vai para a aba sh
-  # sem passar pela página inicial); a tecla s já troca para a aba fixa sh no OmegaShell.
+  # O botão 🧾 Scripts ~/sh (de 28/10/2026) saiu em 12/11/2026 (pedido do dono: "o omega ainda mostra o botão do sh,
+  # pode remover dele"): os ~/sh o Claude roda sozinho (Regra 17) e aparecem no Parlamento do Escritórios 3D. A tecla
+  # s digitada continua trocando para a aba fixa sh.
   [[ -n ${MENU_MSG:-} ]] && cab+=("aviso|aviso|${MENU_MSG//|//}||-")
-  sessoes_botoes menu "Ω omega · sessões" "ações|➕|Nova sessão||n⏎" "ações|📝|Renomear||r⏎" \
-    "ações|❌|Fechar|salva git e docs antes|d⏎" "ações|🔄|Atualizar||a⏎" "ações|🧾|Scripts ~/sh|aba sh|s⏎" "${cab[@]}"
+  sessoes_botoes menu "Ω omega · sessões" "ações|📝|Renomear||r⏎" \
+    "ações|❌|Fechar|salva git e docs antes|d⏎" "ações|🔄|Atualizar||a⏎" "${cab[@]}"
 }
 # Um botão por ~/sh (SCRIPTS e SCRIPTS_BF, na numeração da lista); tecla = nº⏎.
 scripts_botoes() {
@@ -1081,6 +1083,7 @@ menu() {
       q|Q) abas || return; MENU_MSG="a aba omega é fixa: não fecha" ;;
       a|A) ;;
       n|N) nova_sessao ;;
+      [nN][0-9]*) nova_sessao "${esc:1}" ;;   # n<nº>: o + do cabeçalho do servidor (09/11/2026), já com o servidor escolhido
       # No CloudShell o sh digitado vai para a aba fixa sh.
       s|S|sh|SH) if abas; then command tmux select-window -t ':=sh' 2>/dev/null || MENU_MSG="a aba sh não está aberta (reabra o OmegaShell)"; else menu_sh; fi ;;
       [yYxX]*)
