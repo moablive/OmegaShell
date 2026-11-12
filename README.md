@@ -7,7 +7,9 @@ vários servidores: Claude, Gemini e shells comuns rodando em tmux no servidor p
 num Mac, todos abertos e controlados de uma tela só. Nasceu para o meu dia a dia, que tem vários agentes de IA
 trabalhando ao mesmo tempo em projetos diferentes, cada um numa máquina.
 
-![Página inicial](docs/img/inicio.png)
+![Tela de Sessões](docs/img/sessoes.png)
+
+O app abre direto na tela de Sessões: sem página inicial no caminho.
 
 ## O que ele faz
 
@@ -30,9 +32,9 @@ trabalhando ao mesmo tempo em projetos diferentes, cada um numa máquina.
 - **Fecha uma sessão de IA sem perder trabalho.** Ao encerrar, o Claude recebe `/quit` e o servidor roda o
   fechamento da sessão (auditoria de segurança, commit e push do que ficou, aviso no Telegram).
 
-| Sessões por servidor | Scripts ~/sh |
-|---|---|
-| ![Sessões](docs/img/sessoes.png) | ![Scripts](docs/img/scripts.png) |
+| Scripts ~/sh |
+|---|
+| ![Scripts](docs/img/scripts.png) |
 
 | ⌥ Tab numa aba do Claude | ⌥ C — cor da aba | ⌥ G — agrupar abas |
 |---|---|---|
@@ -75,7 +77,7 @@ cloudshell/
   Dockerfile, nginx.conf, entrypoint.sh, cloudshell-login, ssh_config, known_hosts (vazio: o seu servidor)
   gateway/   sessão e login (Node/TS) contra o LoginHUB
   web/       telas de login, 2FA e convite (Vue)
-  pwa/       botoes.js (painel ⌥ Tab), inicio.js (página inicial), sessoes.js (Sessões/Scripts), ícones, logos
+  pwa/       botoes.js (painel ⌥ Tab), inicio.js (entrada direta nas Sessões, versão da página), sessoes.js (Sessões/Scripts), ícones, logos
   host/      lado do servidor: tmux.conf, abas.sh (menus), botoes.sh (OSC 7717), sessao.sh, fixas.sh
 omega/omega  o gerenciador de sessões, IA e scripts
 auditoria/   submódulo privado (link dá 404 para quem não é o dono, de propósito)
