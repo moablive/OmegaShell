@@ -40,6 +40,12 @@
     '#csb .b.s{background:rgba(255,255,255,.2);box-shadow:inset 0 0 0 1px rgba(255,255,255,.12)}',
     '#csb .b:active{transform:scale(.94)}',
     '#csb .b.x{opacity:.32;cursor:default}',
+    // ◀ ▶ da Nova sessão · servidor (07/11/2026): mudam a ordem dos servidores, a mesma da tela de Sessões.
+    '#csb .mv{position:absolute;top:5px;width:22px;height:22px;border-radius:7px;display:none;align-items:center;',
+    'justify-content:center;font-size:10px;background:rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.18);color:#fff}',
+    '#csb .mv:hover{background:rgba(179,136,255,.6)}',
+    '#csb .mv.esq{left:5px}#csb .mv.dir{right:5px}',
+    '#csb .b:hover .mv,#csb .b.s .mv{display:flex}',
     // Paleta de cores (⌥ C, 27/10/2026, pedido do dono: no mesmo efeito do ⌥ Tab, as cores em caixinhas): cada cor é
     // uma caixinha como ícone de app do Mac — degradê de cima para baixo, brilho no alto e sombra embaixo.
     '#csb .esf{display:inline-block;width:46px;height:46px;border-radius:12px;vertical-align:middle;box-sizing:border-box;',
@@ -325,7 +331,21 @@
         } else if (it.e === '◯' && menu.id === 'cor') {   // "Padrão" (sem cor): esfera de vidro vazia
           var vz = document.createElement('span'); vz.className = 'esf vazia'; e.appendChild(vz);
         } else e.textContent = it.e || '•';
-        if (menu.id === 'nova-servidor') logoServidor(e, it.r, 40, false);
+        // Ícone "srv:<servidor>" (omega, 07/11/2026): o logo vem do servidor, não do nome na tela, que pode ter mudado.
+        if (menu.id === 'nova-servidor') {
+          var host = /^srv:/.test(it.e || '') ? it.e.slice(4) : it.r;
+          if (host !== it.r || /^srv:/.test(it.e || '')) e.textContent = '🖥️';
+          logoServidor(e, host, 40, false);
+          var pos = parseInt(it.k, 10), tot = menu.i.filter(function (x) { return /^srv:/.test(x.e || ''); }).length;
+          [['esq', '◀', 'ou', -1, pos > 1], ['dir', '▶', 'ob', 1, pos < tot]].forEach(function (x) {
+            if (!x[4] || !/^srv:/.test(it.e || '')) return;
+            var mv = document.createElement('span'); mv.className = 'mv ' + x[0]; mv.textContent = x[1];
+            mv.title = x[3] < 0 ? 'Mover para a esquerda (⇧←)' : 'Mover para a direita (⇧→)';
+            mv.addEventListener('mousedown', function (ev) { ev.preventDefault(); ev.stopPropagation(); });
+            mv.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); move(n, x[3]); });
+            b.appendChild(mv);
+          });
+        }
         var r = document.createElement('span'); r.className = 'r'; r.textContent = it.r || '';
         b.appendChild(e); b.appendChild(r);
         if (it.d) { var d = document.createElement('span'); d.className = 'd'; d.textContent = it.d; b.appendChild(d); }
@@ -342,25 +362,18 @@
       painel.appendChild(l);
     });
     var n = document.createElement('div'); n.className = 'n'; painel.appendChild(n);
-    // ⌂ Início em todo painel (27/10/2026, pedido do dono): fecha o menu (Esc no do tmux) e abre a página inicial.
-    var ini = document.createElement('button'); ini.type = 'button'; ini.tabIndex = -1; ini.className = 'ini';
-    ini.textContent = '⌂ Início';
-    ini.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
-    ini.addEventListener('click', function () {
-      if (menu && menu.tipo === 'tmux') { some(); digita('\x1b'); } else { aberto = segura = false; mostra(); }
-      var v = document.getElementById('csi-v'); if (v) v.click();
-    });
     // ✕ Cancelar (30/10/2026, pedido do dono: "ficou faltando um botão de cancelar"): o mesmo que o Esc.
     var canc = document.createElement('button'); canc.type = 'button'; canc.tabIndex = -1; canc.className = 'ini canc';
     canc.textContent = '✕ Cancelar';
     canc.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
     canc.addEventListener('click', function () { cancela(); t.focus(); });
     var rod = document.createElement('div'); rod.className = 'rodape';
-    rod.appendChild(canc); rod.appendChild(ini);
+    rod.appendChild(canc);   // o ⌂ Início saiu em 12/11/2026 (pedido do dono: sem página inicial)
     painel.appendChild(rod);
     var h = document.createElement('div'); h.className = 'h';
     h.textContent = segura && menu.id === 'cor' ? '⌥ segurado: C próxima cor · ⇧C volta · ⏎ aplicar · esc cancela'
                   : segura ? '⌥ segurado: tab próximo · ⇧tab volta · ⏎ abrir · esc cancela'
+                           : menu.id === 'nova-servidor' ? '← → ou tab escolher · ⇧← ⇧→ muda a ordem · ⏎ abrir · esc cancela'
                            : '← → ou tab escolher · ⏎ abrir · esc cancela';
     painel.appendChild(h);
     sobMouse();
@@ -422,6 +435,17 @@
     setTimeout(function () { pede = false; }, 2000);
   }
 
+  // Nova sessão · servidor: troca o servidor do item n com o vizinho (dir -1/+1). O omega grava a ordem e manda o
+  // painel de novo; o escolhido acompanha o servidor que andou.
+  function move(n, dir) {
+    var it = menu && menu.i[n], pos = it && parseInt(it.k, 10);
+    if (!pos || menu.id !== 'nova-servidor' || !menu.i[n + dir] || !/^srv:/.test(menu.i[n + dir].e || '')) return;
+    sel = n + dir;
+    pede = true; setTimeout(function () { pede = false; }, 2000);
+    digita((dir < 0 ? 'ou' : 'ob') + pos + '\r');
+    t.focus();
+  }
+
   function escolhe(n) {
     var it = menu && menu.i[n], d = it && teclas(it.k);
     if (!d) return;
@@ -469,9 +493,12 @@
     } catch (e) { return true; }
     // Troca de aba (botoes.sh esconde, 27/10/2026): some com os botões e avisa a tela de Sessões/Scripts da aba nova.
     if (m && m.tipo === 'aba') { some(); avisa(m); return true; }
-    // ☰ CloudShell da barra (27/10/2026): só abre a página inicial.
-    if (m && m.tipo === 'inicio') { var v = document.getElementById('csi-v'); if (v) v.click(); return true; }
+    // ☰ CloudShell da barra (27/10/2026): abria a página inicial; sem ela (12/11/2026), leva à tela de Sessões.
+    if (m && m.tipo === 'inicio') { if (window.csSessoes) window.csSessoes(); return true; }
     if (!m || !Array.isArray(m.i) || (m.tipo !== 'omega' && m.tipo !== 'tmux')) return true;
+    // Sem o botão 🧾 Scripts ~/sh na tela de Sessões nem no ⌥ Tab dela (12/11/2026, pedido do dono: só as sessões; os
+    // ~/sh o Claude roda sozinho). O omega ainda manda a ação "s⏎" no menu das sessões; ela sai aqui.
+    if (m.tipo === 'omega' && m.id === 'menu') m.i = m.i.filter(function (it) { return !(it.g === 'ações' && it.k === 's⏎'); });
     var mesmo = menu && menu.id === m.id, k = mesmo && menu.i[sel] ? menu.i[sel].k : null;
     menu = m; bruto = dados;
     avisa(m);
@@ -517,7 +544,8 @@
     }
     if (!aberto || e.metaKey || e.ctrlKey || e.altKey) return;
     var k = e.key;
-    if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'Tab') anda(k === 'Tab' && e.shiftKey ? -1 : 1);
+    if (e.shiftKey && menu && menu.id === 'nova-servidor' && (k === 'ArrowLeft' || k === 'ArrowRight')) move(sel, k === 'ArrowLeft' ? -1 : 1);
+    else if (k === 'ArrowRight' || k === 'ArrowDown' || k === 'Tab') anda(k === 'Tab' && e.shiftKey ? -1 : 1);
     else if (k === 'ArrowLeft' || k === 'ArrowUp') anda(-1);
     else if (k === 'Escape') cancela();
     else if (k === 'Enter') { var ce = campo(); if (ce) envia(ce); else escolhe(sel); }
@@ -546,11 +574,12 @@
 
   // ---- Logos na barra de abas (28/10/2026, pedido do dono: "use o ícone oficial da empresa e coloque o ícone da
   // IA que está rodando"). O tmux não desenha imagem: o rótulo da aba (host/tmux.conf, @aba_rotulo) leva marcas de
-  // texto — 🌊 🥩 🍎 + 3 espaços (servidor, 5 células) e 🤖 ✨ 💻 (IA, 2 células) — e a página pinta por cima de cada
+  // texto — 🌊 🥩 🍎 🛒 + 3 espaços (servidor, 5 células) e 🤖 ✨ 💻 (IA, 2 células) — e a página pinta por cima de cada
   // marca uma caixa com a cor de fundo da célula e o logo oficial (logos.js) ou o da IA (ICONE). A caixa não
   // recebe mouse: clique, arrasto e menu da barra continuam indo para o tmux. Em terminal comum ficam os emojis.
   // Redesenha quando o xterm pinta a 1ª linha (onRender) ou muda de tamanho; igual ao anterior = nada a fazer.
   var MARCA = { '🌊': ['srv', 'awlsrv', 5], '🥩': ['srv', 'srv2', 5], '🍎': ['srv', 'mac', 5],
+                '🛒': ['srv', 'pdv-casadecarnes', 5],
                 '🤖': ['ia', 'claude', 2], '✨': ['ia', 'gemini', 2], '💻': ['ia', 'terminal', 2] };
   var barra = null, barraSig = '', barraPend = false;
   var abasAntes = {}, abasAgora = [], hoverNome = '', excluirAte = 0, fantasmas = null, dimAntes = null, barraDupla = false;

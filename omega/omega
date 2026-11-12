@@ -59,9 +59,13 @@ sudo_logado() {
 # Servidores remotos (24/10/2026, pedidos do dono: o bf e depois o Mac também no CloudShell): a
 # conta "bf" é o srv2 do srv2 e a "mac" é o macuser do Mac, pelo ssh do
 # dono do ~/sh (awlsrv: chave id_esteira e ControlMaster dele, Hosts do ~/.ssh/config). O ~/sh é só do awlsrv e do bf.
-REMOTOS=(bf mac)
-declare -A R_HOST=([bf]=srv2 [mac]=mac) R_DONO=([bf]=srv2 [mac]=macuser) \
-           R_HOME=([bf]=/home/srv2 [mac]=/Users/macuser) R_ESTADO=()
+# O "pdv" (06/11/2026, pedido do dono) é o Ubuntu do WSL2 do PDV da Casa de Carnes (cliente), conta pdv: está na
+# tailnet da Sul e o awlsrv chega nele pelo bf (Host pdv-casadecarnes do ~/.ssh/config, ProxyCommand com nc).
+REMOTOS=(bf mac pdv)
+declare -A R_HOST=([bf]=srv2 [mac]=mac [pdv]=pdv-casadecarnes) R_DONO=([bf]=srv2 [mac]=macuser [pdv]=pdv) \
+           R_HOME=([bf]=/home/srv2 [mac]=/Users/macuser [pdv]=/home/pdv) R_ESTADO=()
+# Shell de login das sessões novas: zsh em todos, menos no PDV (Ubuntu do WSL2 só com bash, 06/11/2026).
+declare -A R_SHELL=([pdv]=bash)
 BF=srv2 BF_DONO=srv2 BF_HOME=/home/srv2
 remoto() { [[ -n ${R_HOST[${1:-}]:-} ]]; }
 casa() { if remoto "$1"; then echo "${R_HOME[$1]}"; elif [[ $1 == root ]]; then echo /root; else echo "/home/$1"; fi; }
@@ -164,13 +168,66 @@ REMOTO
 
 TERMINAIS=()   # conta|nome|cmd|situação|anexados
 # Blocos do menu de sessões: 1 = este servidor, 2… = os remotos, na ordem de REMOTOS.
-BLOCOS=("$HOST_CURTO")
-for _r in "${REMOTOS[@]}"; do BLOCOS+=("${R_HOST[$_r]}"); done; unset _r
-sh_bloco_titulo() { printf '\e[36m── %s\e[0m\n' "${BLOCOS[$1 - 1]}"; }
+# BCONTA = a conta de cada bloco ($DONO_SH neste servidor, a chave de REMOTOS nos outros).
+BLOCOS=("$HOST_CURTO") BCONTA=("$DONO_SH")
+for _r in "${REMOTOS[@]}"; do BLOCOS+=("${R_HOST[$_r]}"); BCONTA+=("$_r"); done; unset _r
+# Ordem e nome dos servidores na tela (07/11/2026, pedido do dono: "organizar os servidores de cima para baixo e
+# ajustar o nome deles"): ~/.config/omega/servidores do dono do ~/sh, uma linha "<servidor>|<nome na tela>" por
+# servidor, na ordem de cima para baixo (nome vazio = o do servidor). Gravado pelas teclas ou/ob/on da tela de
+# Sessões (▲ ▼ ✏️ no cabeçalho de cada servidor); servidor que não está no arquivo vai para o fim.
+SERVIDORES_CONF=$(casa "$DONO_SH")/.config/omega/servidores
+declare -A APELIDO=()
+servidores_le() {
+  local -a b=() c=(); local h n i
+  if [[ -r $SERVIDORES_CONF ]]; then
+    while IFS='|' read -r h n; do
+      for i in "${!BLOCOS[@]}"; do
+        [[ ${BLOCOS[i]} == "$h" ]] || continue
+        b+=("$h"); c+=("${BCONTA[i]}"); [[ -n $n ]] && APELIDO[$h]=$n
+        unset 'BLOCOS[i]' 'BCONTA[i]'
+      done
+    done < "$SERVIDORES_CONF"
+  fi
+  BLOCOS=("${b[@]}" "${BLOCOS[@]}") BCONTA=("${c[@]}" "${BCONTA[@]}")
+}
+servidores_grava() {
+  local i
+  mkdir -p "${SERVIDORES_CONF%/*}"
+  for i in "${!BLOCOS[@]}"; do printf '%s|%s\n' "${BLOCOS[i]}" "${APELIDO[${BLOCOS[i]}]:-}"; done > "$SERVIDORES_CONF"
+}
+servidores_le
+nome_srv() { echo "${APELIDO[$1]:-$1}"; }
+# Nº do bloco (1…) do servidor da conta $1; conta local que não é a do dono (root) fica no bloco deste servidor.
+bloco_de() {
+  local i h; h=$(servidor_de "$1")
+  for i in "${!BLOCOS[@]}"; do [[ ${BLOCOS[i]} == "$h" ]] && { echo $((i + 1)); return; }; done
+  echo 1
+}
+# ou<n> sobe, ob<n> desce e on<n> <nome> renomeia o bloco n (on<n> sem nome volta ao nome do servidor).
+servidor_ajusta() {
+  local op=$1 n=$2 nome=$3 i j h
+  [[ $n =~ ^[0-9]+$ ]] && (( n >= 1 && n <= ${#BLOCOS[@]} )) || { MENU_MSG="Servidor inválido: '$n'"; return; }
+  i=$((n - 1)) h=${BLOCOS[n - 1]}
+  case $op in
+    u|b)
+      [[ $op == u ]] && j=$((i - 1)) || j=$((i + 1))
+      (( j >= 0 && j < ${#BLOCOS[@]} )) || return 0
+      BLOCOS[i]=${BLOCOS[j]} BLOCOS[j]=$h
+      h=${BCONTA[i]}; BCONTA[i]=${BCONTA[j]} BCONTA[j]=$h
+      MENU_MSG="↕ $(nome_srv "${BLOCOS[j]}") agora é o $((j + 1))º" ;;
+    n)
+      nome=${nome//[|[:cntrl:]]/}; nome=${nome:0:40}
+      nome=${nome#"${nome%%[![:space:]]*}"}; nome=${nome%"${nome##*[![:space:]]}"}
+      if [[ -z $nome || $nome == "$h" ]]; then unset 'APELIDO[$h]'; MENU_MSG="✏️ $h volta a se chamar $h"
+      else APELIDO[$h]=$nome; MENU_MSG="✏️ $h agora aparece como $nome"; fi ;;
+  esac
+  servidores_grava || MENU_MSG="✗ não gravei $SERVIDORES_CONF"
+}
+sh_bloco_titulo() { printf '\e[36m── %s\e[0m\n' "$(nome_srv "${BLOCOS[$1 - 1]}")"; }
 bloco_vazio() {
   local r=''
   sh_bloco_titulo "$1"
-  (( $1 > 1 )) && r=${REMOTOS[$1 - 2]}
+  remoto "${BCONTA[$1 - 1]}" && r=${BCONTA[$1 - 1]}
   if [[ -n $r && ${R_ESTADO[$r]:-} == *✗* ]]; then printf '    \e[31msem resposta do ssh\e[0m\n'
   else echo "    (nenhuma sessão aberta)"; fi
 }
@@ -192,9 +249,8 @@ terminais_lista() {
       avisos+=$(printf '\e[31m    %s: %s\e[0m' "$c" "$(grep -v '^\s*$' "$erro" | tail -n1)")$'\n'
     fi
     rm -f "$erro"
-    # g = bloco: 1 este servidor, 2… os remotos (um bloco por servidor, cada um do mais recente ao
-    # mais antigo)
-    g=1; for k in "${!REMOTOS[@]}"; do [[ ${REMOTOS[k]} == "$c" ]] && g=$((k + 2)); done
+    # g = bloco, na ordem da tela (servidores_le; um bloco por servidor, cada um do mais recente ao mais antigo)
+    g=$(bloco_de "$c")
     [[ $c == root && -z $saida && $rc == 0 ]] && ROOT_VAZIO_ATE=$((SECONDS + 60))
     [[ -n $saida ]] && todas+=$(sed "s/^/$g|$c|/" <<< "$saida")$'\n'
   done
@@ -241,19 +297,27 @@ entrar() {
   tm "$c" -u attach -t "=$s"
 }
 
-# Tecla n, como no omega do Mac: escolhe o servidor (awlsrv, srv2, mac) e se abre com
+# Tecla n, como no omega do Mac: escolhe o servidor (awlsrv, srv2, mac, pdv-casadecarnes) e se abre com
 # o Claude, o Gemini ou só o terminal; sugere um nome livre (claude, claude-2… / gemini… / term, term-2…). No CloudShell
 # a sessão abre numa aba nova com o nome dela.
 nova_sessao() {
   local srv c tipo prog nome sug base k=1 i
   if calado; then limpa; else echo; fi
   local -a bt=()
-  for i in "${!BLOCOS[@]}"; do diz '  %s) %s\n' $((i + 1)) "${BLOCOS[i]}"; bt+=("|🖥️|${BLOCOS[i]}||$((i + 1))⏎"); done
-  botoes_abre nova-servidor "Nova sessão · servidor" "${bt[@]}"
-  pergunta srv "Servidor da nova sessão (Enter = 1): " || return
+  # ◀ ▶ no painel (07/11/2026, pedido do dono: "esse também precisa ser organizável"): ou<n>/ob<n> mudam a ordem
+  # (servidor_ajusta, a mesma da tela de Sessões) e o painel volta na ordem nova. Ícone "srv:<servidor>": a página
+  # tira o logo pelo servidor, e o rótulo é o nome na tela.
+  while :; do
+    bt=()
+    for i in "${!BLOCOS[@]}"; do diz '  %s) %s\n' $((i + 1)) "$(nome_srv "${BLOCOS[i]}")"; bt+=("|srv:${BLOCOS[i]}|$(nome_srv "${BLOCOS[i]}")||$((i + 1))⏎"); done
+    botoes_abre nova-servidor "Nova sessão · servidor" "${bt[@]}"
+    pergunta srv "Servidor da nova sessão (Enter = 1, ou<n>/ob<n> = sobe/desce): " || return
+    [[ $srv =~ ^[oO]([ubUB])([0-9]+)$ ]] || break
+    servidor_ajusta "${BASH_REMATCH[1],,}" "${BASH_REMATCH[2]}" ''
+  done
   srv=${srv:-1}
   [[ $srv =~ ^[0-9]+$ ]] && (( srv >= 1 && srv <= ${#BLOCOS[@]} )) || { MENU_MSG="Servidor inválido: '$srv'"; return; }
-  if (( srv == 1 )); then c=$DONO_SH; else c=${REMOTOS[srv - 2]}; fi
+  c=${BCONTA[srv - 1]}
   diz '\n  1) Claude\n  2) Gemini\n  3) só o terminal\n'
   botoes_abre nova-tipo "Nova sessão em $(servidor_de "$c") · abrir com" "|claude|Claude||1⏎" "|gemini|Gemini||2⏎" "|terminal|Só o terminal||3⏎"
   pergunta tipo "Abrir com (Enter = 1): " || return
@@ -277,7 +341,8 @@ nova_sessao() {
   fi
   # Claude roda como o dono do ~/sh no awlsrv (é dele o login, a memória e as regras de usuário).
   local -a cmd=()
-  [[ -n $prog ]] && cmd=("zsh -lic $prog; exec zsh -l")
+  local sh=zsh; remoto "$c" && sh=${R_SHELL[$c]:-zsh}
+  [[ -n $prog ]] && cmd=("$sh -lic $prog; exec $sh -l")
   tm "$c" new-session -d -s "$nome" -c "$(casa "$c")" "${cmd[@]}" </dev/null \
     || { MENU_MSG="✗ não abri a sessão $nome em $(servidor_de "$c")"; return; }
   terminal_abre_aba "$c" "$nome" || entrar "$c" "$nome"
@@ -716,8 +781,9 @@ tela_menu_botoes() {
   local i r est; local -a cab=()
   for i in "${!BLOCOS[@]}"; do
     est='no ar'
-    if (( i > 0 )); then r=${REMOTOS[i - 1]}; [[ ${R_ESTADO[$r]:-} == *✗* ]] && est='sem resposta do ssh'; fi
-    cab+=("${BLOCOS[i]}|servidor|${BLOCOS[i]}|$est|-")
+    r=${BCONTA[i]}; remoto "$r" && [[ ${R_ESTADO[$r]:-} == *✗* ]] && est='sem resposta do ssh'
+    # g = o servidor (a página tira o logo dele), rótulo = o nome na tela (APELIDO).
+    cab+=("${BLOCOS[i]}|servidor|$(nome_srv "${BLOCOS[i]}")|$est|-")
   done
   # 🧾 Scripts ~/sh (28/10/2026, pedido do dono: da tela de Sessões e do ⌥ Tab da aba omega se vai para a aba sh
   # sem passar pela página inicial); a tecla s já troca para a aba fixa sh no OmegaShell.
@@ -748,8 +814,8 @@ tela_sh_botoes() {
   # visual da de Sessões, um bloco por servidor com o logo). Ícone "servidor" e tecla "-": o painel não desenha.
   scripts_botoes sh "🧾 sh · scripts" "ações|▶️|Automático|todos do $HOST_CURTO em ordem|t⏎" \
     "ações|🔄|Atualizar||a⏎" "ações|🔑|Senha do sudo|kx = apagar|k⏎" "ações|🗑|Excluir||x⏎" \
-    "$HOST_CURTO|servidor|$HOST_CURTO|${SH_ERRO:+sem resposta}${SH_ERRO:-no ar}|-" \
-    "$BF|servidor|$BF|${SH_BF_ESTADO:-no ar}|-" \
+    "$HOST_CURTO|servidor|$(nome_srv "$HOST_CURTO")|${SH_ERRO:+sem resposta}${SH_ERRO:-no ar}|-" \
+    "$BF|servidor|$(nome_srv "$BF")|${SH_BF_ESTADO:-no ar}|-" \
     ${SH_MSG:+"aviso|aviso|${SH_MSG//|//}||-"}
 }
 # abre_aba <nome> <comando>: 0 = abriu, 2 = já existia (foi para ela). O alvo é o id da janela:
@@ -1006,6 +1072,10 @@ menu() {
   while true; do
     ao_vivo tela_menu "Escolha: número da sessão, n, r, d, y, x, ${p_sh}${p_fim} (Enter = 1): " || return   # Ctrl-D: sai
     esc=$ESC; MENU_MSG=
+    # ▲ ▼ ✏️ dos servidores (servidor_ajusta): o nome pode ter espaço, então vem do ESC inteiro.
+    if [[ $ESC =~ ^[oO]([ubnUBN])([0-9]+)(\ (.*))?$ ]]; then
+      servidor_ajusta "${BASH_REMATCH[1],,}" "${BASH_REMATCH[2]}" "${BASH_REMATCH[4]}"; continue
+    fi
     esc=${esc// /}
     case $esc in
       q|Q) abas || return; MENU_MSG="a aba omega é fixa: não fecha" ;;
@@ -1115,7 +1185,7 @@ case ${1:-} in
   # Roda um ~/sh nesta tela e espera o Enter (é o que a aba aberta pelo sh_abre_aba executa).
   # Entra numa sessão tmux da conta (é o que a aba aberta pelo terminal_abre_aba executa).
   entrar)
-    contem "${2:-}" "${CONTAS[@]}" "${REMOTOS[@]}" && nome_ok "${3:-}" || { echo "uso: omega entrar <conta|bf|mac> <sessão>" >&2; exit 2; }
+    contem "${2:-}" "${CONTAS[@]}" "${REMOTOS[@]}" && nome_ok "${3:-}" || { echo "uso: omega entrar <conta|bf|mac|pdv> <sessão>" >&2; exit 2; }
     # Na aba: se o attach falhar, o erro fica na tela até o Enter (senão a aba some na hora).
     entrar "$2" "$3" || { echo; read -rp "Enter = fechar a aba " _ || true; } ;;
   rodar)
@@ -1146,7 +1216,7 @@ case ${1:-} in
   # mesma pergunta da tecla d (Claude: Esc, /quit e a Regra 7 no awlsrv; terminal: kill-session). A aba da sessão
   # fecha sozinha quando ela acaba.
   encerrar)
-    contem "${2:-}" "${CONTAS[@]}" "${REMOTOS[@]}" && nome_ok "${3:-}" || { echo "uso: omega encerrar <conta|bf|mac> <sessão>" >&2; exit 2; }
+    contem "${2:-}" "${CONTAS[@]}" "${REMOTOS[@]}" && nome_ok "${3:-}" || { echo "uso: omega encerrar <conta|bf|mac|pdv> <sessão>" >&2; exit 2; }
     terminais_lista >/dev/null
     ia= st= att=0
     for l in "${TERMINAIS[@]}"; do
@@ -1168,7 +1238,7 @@ case ${1:-} in
   renomear)
     c=${2:-} alvo=${3:-} novo=${4:-}
     contem "$c" "${CONTAS[@]}" "${REMOTOS[@]}" && { [[ $alvo =~ ^\$[0-9]+$ ]] || nome_ok "$alvo"; } \
-      || { echo "uso: omega renomear <conta|bf|mac> <sessão|\$id> <novo>" >&2; exit 2; }
+      || { echo "uso: omega renomear <conta|bf|mac|pdv> <sessão|\$id> <novo>" >&2; exit 2; }
     [[ $novo =~ ^[A-Za-z0-9_-]{1,40}$ ]] || { echo "nome inválido: '$novo' (letras, números, - e _)" >&2; exit 2; }
     [[ $alvo == \$* ]] || alvo="=$alvo:"
     velho=$(tm "$c" display -p -t "$alvo" '#{session_name}' </dev/null 2>/dev/null) || { echo "sessão não encontrada" >&2; exit 1; }
@@ -1180,7 +1250,7 @@ case ${1:-} in
     echo "$velho → $novo" ;;
   # Painel dividido da aba com o fresh no projeto da sessão (✎ do ⌥ Tab).
   editor)
-    contem "${2:-}" "${CONTAS[@]}" "${REMOTOS[@]}" && nome_ok "${3:-}" || { echo "uso: omega editor <conta|bf|mac> <sessão>" >&2; exit 2; }
+    contem "${2:-}" "${CONTAS[@]}" "${REMOTOS[@]}" && nome_ok "${3:-}" || { echo "uso: omega editor <conta|bf|mac|pdv> <sessão>" >&2; exit 2; }
     editor "$2" "$3" ;;
   ''|menu) menu ;;
   -h|--help|ajuda) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//' ;;

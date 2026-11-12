@@ -276,7 +276,10 @@ case $acao in
         # no mesmo dia (de uma sessão se vai rodar um ~/sh): só ele nos botões; o Ω omega fica só no menu em texto.
         omega|sh)
           [[ ${CS_ATALHO:-} == 1 ]] || continue
-          if [[ $jn == omega ]]; then jk=O ic=Ω d='sessões'; else jk=S ic=🧾 d='scripts ~/sh'; bfix+=("OmegaShell|$ic|$jn|$d|$jk"); fi
+          # 12/11/2026 (pedido do dono: sem página inicial e sem botões do sh, só as sessões): o 🧾 sh saiu dos botões
+          # (os ~/sh o Claude roda sozinho, Regra 17, e aparecem no Parlamento do Escritórios 3D; fica só no menu em
+          # texto) e o Ω Sessões entrou no lugar: é por ele que se volta de uma aba à tela de Sessões.
+          if [[ $jn == omega ]]; then jk=O ic=Ω d='sessões'; bfix+=("OmegaShell|$ic|Sessões|todas as sessões|$jk"); else jk=S ic=🧾 d='scripts ~/sh'; fi
           mfix+=("$ic $jn ($d)" "$jk" "select-window -t $j")
           continue ;;
         conselho) continue ;;
@@ -396,7 +399,7 @@ case $acao in
     cliente=${4:-}
     [[ $cliente =~ ^/dev/pts/[0-9]+$ ]] || exit 0
     if [[ -n $(t display -p -t "$w" '#{@jfixa}') ]]; then t display-message "a aba $(t display -p -t "$w" '#W') é fixa: o nome não muda"; exit 0; fi
-    atual=$(t display -p -t "$w" '#{?@aba_nome,#{@aba_nome},#{s/^(awlsrv|bf|mac)-//:window_name}}')
+    atual=$(t display -p -t "$w" '#{?@aba_nome,#{@aba_nome},#{s/^(awlsrv|bf|mac|pdv)-//:window_name}}')
     if [[ -n $(t display -p -t "$w" '#{@omega_sid}') ]]; then
       btn renomear "renomear a sessão · digite o novo nome" "sessão|✎|${atual//|/}|letras, números, - e _ · troca no servidor da sessão|✎"
     else
@@ -411,7 +414,7 @@ case $acao in
     # Aba comum: o apelido @aba_nome. Sem mensagem amarela do tmux no sucesso: a barra já mostra o nome novo.
     v=$(t show -wv -t "$w" @renome 2>/dev/null || true); t set -wu -t "$w" @renome
     [[ -z $(t display -p -t "$w" '#{@jfixa}') ]] || exit 0
-    v=$(sed -E 's/^(awlsrv|bf|mac)-//' <<< "$v")
+    v=$(sed -E 's/^(awlsrv|bf|mac|pdv)-//' <<< "$v")
     conta=$(t display -p -t "$w" '#{@omega_conta}') sid=$(t display -p -t "$w" '#{@omega_sid}')
     if [[ -n $conta && $sid =~ ^\$[0-9]+$ ]]; then
       [[ -n $v ]] || exit 0

@@ -46,6 +46,39 @@
     'border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06)}',
     '#css .logo img{height:100%;width:auto;max-width:112px;object-fit:contain}',
     '#css .nm{font-size:18px;font-weight:700}',
+    // ▲ ▼ ✏️ do servidor (07/11/2026): ordem de cima para baixo e nome na tela, gravados pelo omega.
+    '#css .ord{margin-left:auto;display:flex;gap:6px}',
+    '#css .ord span{all:unset;cursor:pointer;width:30px;height:30px;border-radius:10px;display:flex;align-items:center;',
+    'justify-content:center;font-size:13px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);',
+    'color:rgba(242,242,247,.75);transition:background .15s,border-color .15s}',
+    '#css .ord span:hover{background:rgba(255,255,255,.14);border-color:rgba(179,136,255,.5)}',
+    '#css .ord span.off{opacity:.25;pointer-events:none}',
+    // + do servidor (09/11/2026, pedido do dono): sessão nova já naquele servidor, no lugar do botão Nova sessão do topo.
+    '#css .ord span.mais{font-size:20px;font-weight:700;color:#b388ff;border-color:rgba(179,136,255,.5)}',
+    // ✏️ Nome na tela (07/11/2026, pedido do dono: "faltou CSS nessa modal do nome"): no lugar do prompt() do
+    // navegador, o mesmo vidro do painel de botões (#csb do botoes.js), com logo, campo e Cancelar/Original/Salvar.
+    '#css .nmv{position:fixed;inset:0;z-index:30;display:flex;align-items:center;justify-content:center;padding:16px;',
+    'background:rgba(8,8,14,.72);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}',
+    '#css .nmv .p{width:min(100%,420px);box-sizing:border-box;padding:20px 20px 16px;border-radius:26px;text-align:center;',
+    'background:rgba(36,36,46,.92);-webkit-backdrop-filter:blur(28px) saturate(170%);backdrop-filter:blur(28px) saturate(170%);',
+    'border:1px solid rgba(255,255,255,.14);box-shadow:0 24px 60px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.08);',
+    'animation:css-in .16s cubic-bezier(.445,.05,.55,.95)}',
+    '@keyframes css-in{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}',
+    '#css .nmv .t{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:rgba(242,242,247,.55)}',
+    '#css .nmv .logo{margin:14px auto 6px}',
+    '#css .nmv .h{font:600 12px ui-monospace,Menlo,monospace;color:rgba(242,242,247,.5)}',
+    '#css .nmv input{all:unset;box-sizing:border-box;display:block;width:100%;margin:14px 0 6px;padding:11px 14px;border-radius:12px;',
+    'background:rgba(0,0,0,.35);border:1px solid rgba(179,136,255,.55);color:#f2f2f7;font:600 15px -apple-system,system-ui,sans-serif;',
+    'text-align:center}',
+    '#css .nmv input:focus{border-color:#b388ff;box-shadow:0 0 0 3px rgba(179,136,255,.22)}',
+    '#css .nmv .c{font-size:11px;color:rgba(242,242,247,.45)}',
+    '#css .nmv .bts{display:flex;gap:8px;justify-content:center;margin-top:14px;flex-wrap:wrap}',
+    '#css .nmv .bts button{all:unset;cursor:pointer;padding:8px 14px;border-radius:12px;font-size:13px;font-weight:600;',
+    'background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);transition:background .15s,border-color .15s}',
+    '#css .nmv .bts button:hover{background:rgba(255,255,255,.14);border-color:rgba(179,136,255,.5)}',
+    '#css .nmv .bts .canc:hover{border-color:rgba(255,99,99,.6)}',
+    '#css .nmv .bts .ok{background:rgba(179,136,255,.9);color:#14141f;border-color:transparent}',
+    '#css .nmv .bts .ok:hover{background:#c4a3ff}',
     '#css .st{display:inline-flex;align-items:center;gap:6px;margin-top:3px;font-size:12px;color:rgba(242,242,247,.6)}',
     '#css .st i{width:8px;height:8px;border-radius:50%;background:#69db7c;box-shadow:0 0 8px #69db7c}',
     '#css .st.fora i{background:#ff5c7a;box-shadow:0 0 8px #ff5c7a}',
@@ -66,6 +99,13 @@
     '#css .s .ac span:hover{background:rgba(255,255,255,.22)}',
     '#css .s .k{position:absolute;top:50%;right:10px;transform:translateY(-50%);min-width:16px;padding:0 4px;border-radius:6px;',
     'font:600 10px ui-monospace,Menlo,monospace;line-height:16px;color:#14141f;background:rgba(179,136,255,.9)}',
+    // ✕ no cartão (09/11/2026, pedido do dono, com print): fecha a sessão aberta e o tmux dela; o nº vai para o lado dele.
+    '#css .s.fc{padding-right:72px}',
+    '#css .s.fc .k{right:42px}',
+    '#css .s .fx{position:absolute;top:50%;right:10px;transform:translateY(-50%);width:26px;height:26px;border-radius:9px;display:flex;',
+    'align-items:center;justify-content:center;font-size:12px;color:rgba(242,242,247,.7);background:rgba(255,255,255,.05);',
+    'border:1px solid rgba(255,255,255,.10);transition:background .15s,border-color .15s,color .15s}',
+    '#css .s .fx:hover{color:#fff;background:rgba(255,92,122,.3);border-color:rgba(255,92,122,.6)}',
     '#css .gr.lista{grid-template-columns:1fr;gap:6px}',
     '#css .sub{margin:12px 2px 6px;font-size:11.5px;font-weight:600;color:#b388ff;letter-spacing:.03em}',
     // Aviso do omega (05/11/2026): o resultado da última ação, que antes saía em texto no terminal.
@@ -81,10 +121,10 @@
   var MODO = {
     menu: { titulo: 'Sessões', conta: function (n) { return n + (n === 1 ? ' aberta' : ' abertas'); }, lista: false,
             un: ['sessão', 'sessões'], vazio: 'nenhuma sessão aberta', letras: /^[nrda]$/i,
-            rod: 'nº ou ← → e ⏎ abre · n nova · r renomeia · d fecha · ✅/✖ no cartão responde · esc início · ⌥ Tab menus' },
+            rod: 'nº ou ← → e ⏎ abre · + no servidor abre nova · r renomeia · ✕ no cartão ou d fecha · ✅/✖ no cartão responde · ⌥ Tab menus' },
     sh:   { titulo: 'Scripts ~/sh', conta: function (n) { return n + (n === 1 ? ' script' : ' scripts'); }, lista: true,
             un: ['script', 'scripts'], vazio: 'nada para rodar', letras: /^[takx]$/i,
-            rod: 'nº ou ↑ ↓ e ⏎ roda · t automático · a atualiza · k senha do sudo · x exclui · esc início · ⌥ Tab menus' }
+            rod: 'nº ou ↑ ↓ e ⏎ roda · t automático · a atualiza · k senha do sudo · x exclui · ⌥ Tab menus' }
   };
   var REUSO = / · ↻ reutilizáveis$/;
 
@@ -152,7 +192,6 @@
     acoes.forEach(function (it) {
       acao((it.e || '') + ' ' + it.r, it.k.replace('⏎', ''), function () { manda(it.k); });
     });
-    acao('⌂ Início', null, function () { var v = document.getElementById('csi-v'); if (v) v.click(); });
 
     // Aviso do omega (MENU_MSG / SH_MSG, item "aviso"): o resultado da última ação (sessão aberta, fechada, erro).
     menu.i.forEach(function (it) { if (it.e === 'aviso' && it.r) tag('div', 'aviso', it.r, w); });
@@ -161,20 +200,23 @@
     var blocos = [], por = {};
     menu.i.forEach(function (it) {
       if (it.e === 'aviso') return;
-      if (it.e === 'servidor' && !por[it.g]) { por[it.g] = { nome: it.r, st: it.d, s: [], r: [] }; blocos.push(por[it.g]); }
+      // g = o servidor (logo), r = o nome na tela (o omega troca pelo APELIDO); n = nº do bloco nas teclas ou/ob/on.
+      if (it.e === 'servidor' && !por[it.g]) { por[it.g] = { g: it.g, nome: it.r, st: it.d, s: [], r: [], n: blocos.length + 1 }; blocos.push(por[it.g]); }
     });
     lista.forEach(function (it) {
       var g = it.g.replace(REUSO, '');
-      if (!por[g]) { por[g] = { nome: g, st: '', s: [], r: [] }; blocos.push(por[g]); }
+      if (!por[g]) { por[g] = { g: g, nome: g, st: '', s: [], r: [] }; blocos.push(por[g]); }
       (REUSO.test(it.g) ? por[g].r : por[g].s).push(it);
     });
     // vis = os itens na ordem da tela: é ela que as setas e o Enter seguem.
     vis = [];
+    var nsrv = blocos.filter(function (b) { return b.n; }).length;
     blocos.forEach(function (b) {
       var c = tag('section', 'srv', null, w), cab = tag('div', 'cab', null, c);
-      logo(b.nome.replace(/ \(.*\)$/, ''), cab);
+      logo(b.g.replace(/ \(.*\)$/, ''), cab);
       var tx = tag('div', null, null, cab);
       tag('div', 'nm', b.nome, tx);
+      if (M === MODO.menu && b.n) ordem(cab, b, nsrv);
       var fora = /sem resposta/.test(b.st), st = tag('div', 'st' + (fora ? ' fora' : ''), null, tx);
       tag('i', null, null, st);
       var tot = b.s.length + b.r.length;
@@ -207,6 +249,14 @@
           });
         }
         tag('span', 'k', it.k.replace('⏎', ''), bt);
+        // ✕ digita d<nº>⏎ no omega (encerrar): confirma no painel, o Claude sai por /quit (Regra 7) e o tmux da sessão fecha.
+        if (M === MODO.menu && /^\d+⏎$/.test(it.k)) {
+          bt.classList.add('fc');
+          var fx = tag('span', 'fx', '✕', bt);
+          fx.title = 'Fechar a sessão ' + it.r;
+          fx.addEventListener('mousedown', function (ev) { ev.preventDefault(); ev.stopPropagation(); });
+          fx.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); manda('d' + it.k); });
+        }
         bt.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
         bt.addEventListener('mouseover', function () { if (sel !== n) { sel = n; marca(); } });
         bt.addEventListener('click', function () { manda(it.k); });
@@ -215,6 +265,62 @@
     tag('div', 'rod', M.rod, w);
     tag('div', 'num', null, w).id = 'css-num';
     mostraBuf();
+  }
+
+  // ▲ sobe, ▼ desce e ✏️ renomeia o servidor: digita ou<n>⏎, ob<n>⏎ ou on<n> <nome>⏎ no omega, que grava a ordem e
+  // o nome em ~/.config/omega/servidores e manda a tela de novo (pedido do dono, 07/11/2026).
+  function ordem(cab, b, total) {
+    var o = tag('div', 'ord', null, cab);
+    [['+', 'Nova sessão em ' + b.nome, 'n', /sem resposta/.test(b.st)], ['▲', 'Subir', 'ou', b.n === 1],
+     ['▼', 'Descer', 'ob', b.n === total], ['✏️', 'Nome na tela', 'on', false]].forEach(function (x) {
+      var sp = tag('span', (x[2] === 'n' ? 'mais' : '') + (x[3] ? ' off' : ''), x[0], o);
+      sp.title = x[1];
+      sp.addEventListener('mousedown', function (ev) { ev.preventDefault(); ev.stopPropagation(); });
+      sp.addEventListener('click', function (ev) {
+        ev.preventDefault(); ev.stopPropagation();
+        if (x[2] === 'on') { pedeNome(b); return; }
+        envia(x[2] + b.n);
+      });
+    });
+  }
+  function envia(cmd) {
+    raiz.classList.add('enviando');
+    clearTimeout(espera);
+    espera = setTimeout(function () { raiz.classList.remove('enviando'); }, 2500);
+    digita(cmd + '\r');
+    if (t) t.focus();
+  }
+  // Modal do ✏️: Enter salva, Esc ou clique fora cancela; "Original" volta ao nome do servidor (on<n> sem nome).
+  var modal = null;
+  function fechaNome() { if (modal) { modal.remove(); modal = null; } if (t) t.focus(); }
+  function pedeNome(b) {
+    fechaNome();
+    modal = tag('div', 'nmv', null, raiz);
+    var p = tag('div', 'p', null, modal);
+    tag('div', 't', 'Nome na tela', p);
+    logo(b.g, p);
+    tag('div', 'h', b.g, p);
+    var inp = tag('input', null, null, p);
+    inp.type = 'text'; inp.maxLength = 40; inp.spellcheck = false; inp.autocomplete = 'off';
+    inp.value = b.nome; inp.placeholder = b.g;
+    tag('div', 'c', 'só muda o que aparece no OmegaShell · vazio = ' + b.g, p);
+    var bts = tag('div', 'bts', null, p);
+    function salva(v) {
+      var nome = String(v).replace(/[\x00-\x1f\x7f|]/g, '').trim().slice(0, 40);
+      fechaNome(); envia('on' + b.n + (nome ? ' ' + nome : ''));
+    }
+    [['canc', '✕ Cancelar', fechaNome], [null, '↺ Original', function () { salva(''); }], ['ok', '✓ Salvar', function () { salva(inp.value); }]]
+      .forEach(function (x) {
+        var bt = tag('button', x[0], x[1], bts); bt.type = 'button';
+        bt.addEventListener('click', function (ev) { ev.preventDefault(); ev.stopPropagation(); x[2](); });
+      });
+    modal.addEventListener('mousedown', function (ev) { if (ev.target === modal) { ev.preventDefault(); fechaNome(); } });
+    inp.addEventListener('keydown', function (ev) {
+      ev.stopPropagation();
+      if (ev.key === 'Enter') { ev.preventDefault(); salva(inp.value); }
+      else if (ev.key === 'Escape') { ev.preventDefault(); fechaNome(); }
+    });
+    setTimeout(function () { inp.focus(); inp.select(); }, 0);
   }
 
   function marca() { raiz.querySelectorAll('.s').forEach(function (b) { b.classList.toggle('sel', +b.dataset.n === sel); }); }
@@ -275,12 +381,13 @@
 
   function teclado(e) {
     if (!raiz.classList.contains('on')) return;
-    // Página inicial ou botões do ⌥ Tab por cima: as teclas são deles.
-    if (document.querySelector('#csi.on, #csb.on')) return;
+    if (modal) return;   // ✏️ Nome na tela aberto: as teclas são do campo
+    // Botões do ⌥ Tab por cima: as teclas são deles.
+    if (document.querySelector('#csb.on')) return;
     if (e.code === 'Tab' && e.altKey) return;   // ⌥ Tab: os botões do botoes.js abrem por cima desta tela
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     var k = e.key, n = vis.length;
-    if (k === 'Escape') { if (buf) { buf = ''; mostraBuf(); } else { var v = document.getElementById('csi-v'); if (v) v.click(); } }
+    if (k === 'Escape') { buf = ''; mostraBuf(); }   // sem página inicial desde 12/11/2026: o Esc só limpa o nº
     else if (/^[0-9]$/.test(k)) { if (buf.length < 3) buf += k; mostraBuf(); }
     else if (k === 'Backspace') { buf = buf.slice(0, -1); mostraBuf(); }
     else if (k === 'Enter') { if (buf) manda(buf + '⏎'); else if (vis[sel]) manda(vis[sel].k); }
