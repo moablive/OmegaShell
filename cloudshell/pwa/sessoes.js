@@ -347,7 +347,9 @@
   }
 
   // Última tela de cada aba fixa: voltar para a omega ou a sh mostra ela na hora (o omega reenvia em até 1 s).
-  var ultimo = {}, ABA = { omega: 'menu', sh: 'sh' };
+  // A aba sh saiu daqui em 12/11/2026 (pedido do dono): o inicio.js leva dela para a omega, e a tela Scripts ~/sh não
+  // é mais desenhada (o menu "sh" do omega é ignorado no recebe), para não piscar antes da troca.
+  var ultimo = {}, ABA = { omega: 'menu' };
   function recebe(m) {
     if (!m) { menu = null; sel = 0; some(); return; }   // saiu da aba (ou escolheu): começa de novo
     if (m.tipo === 'aba') {                                        // troca de aba (botoes.sh esconde)
@@ -357,6 +359,7 @@
       if (!u) { clearTimeout(espera); raiz.classList.add('on', 'enviando'); return; }
       m = u;
     }
+    if (m.tipo === 'omega' && m.id === 'sh') return;             // tela Scripts ~/sh: não aparece mais (12/11/2026)
     if (m.tipo !== 'omega' || !MODO[m.id]) { some(); return; }   // outra pergunta do omega: fica com os botões
     raiz.classList.remove('enviando');
     // Menu igual ao que já está na tela: nada a refazer (30/10/2026, lentidão: o omega reenvia a cada segundo e

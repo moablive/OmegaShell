@@ -31,6 +31,9 @@
   // O tmux diz a aba ativa no attach e a cada troca (evento "aba" do botoes.sh esconde). Página recém-aberta: vai
   // para as Sessões, esteja onde estiver. Recarga automática (versão nova, rede): fica na aba em que estava.
   // A janela conselho não tem tela: cair nela (fechar outra aba) também leva às Sessões.
+  // A aba fixa sh também (12/11/2026, pedido do dono: "o painel bugou voltando ao sh e ele deveria sempre retornar ao
+  // início"): ao fechar uma aba o tmux caía nela, vizinha da omega, e a tela Scripts ~/sh aparecia. Agora a sh nunca
+  // fica na frente no OmegaShell; os ~/sh se veem no Parlamento do Escritórios 3D.
   var recarga = false, primeira = true;
   try { recarga = sessionStorage.getItem('cs-recarga') === '1'; sessionStorage.removeItem('cs-recarga'); } catch (e) {}
   window.addEventListener('cs-menu', function (ev) {
@@ -38,7 +41,7 @@
     if (!m || m.tipo !== 'aba') return;
     var abrir = primeira && !recarga;
     primeira = false;
-    if (m.w !== 'omega' && (abrir || m.w === 'conselho')) sessoes();
+    if (m.w !== 'omega' && (abrir || m.w === 'conselho' || m.w === 'sh')) sessoes();
   });
 
   // Página nova no servidor (27/10/2026): reconstruir o container só reconecta o terminal, e a página continuava
