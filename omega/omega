@@ -343,7 +343,9 @@ nova_sessao() {
   # Claude roda como o dono do ~/sh no awlsrv (é dele o login, a memória e as regras de usuário).
   local -a cmd=()
   local sh=zsh; remoto "$c" && sh=${R_SHELL[$c]:-zsh}
-  [[ -n $prog ]] && cmd=("$sh -lic $prog; exec $sh -l")
+  # Saiu limpo (/quit, /exit): a sessão acaba junto, sem cair num terminal cru atrás (17/11/2026, pedido do dono:
+  # "ao rodar um /quit fica mostrando dados de terminal"). O shell só fica se o programa falhou, para dar para ver o erro.
+  [[ -n $prog ]] && cmd=("$sh -lic $prog || exec $sh -l")
   tm "$c" new-session -d -s "$nome" -c "$(casa "$c")" "${cmd[@]}" </dev/null \
     || { MENU_MSG="✗ não abri a sessão $nome em $(servidor_de "$c")"; return; }
   terminal_abre_aba "$c" "$nome" || entrar "$c" "$nome"
