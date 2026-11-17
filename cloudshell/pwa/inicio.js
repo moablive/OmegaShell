@@ -36,12 +36,31 @@
   // fica na frente no OmegaShell; os ~/sh se veem no Parlamento do Escritórios 3D.
   var recarga = false, primeira = true;
   try { recarga = sessionStorage.getItem('cs-recarga') === '1'; sessionStorage.removeItem('cs-recarga'); } catch (e) {}
+
+  // Capa de abertura (17/11/2026, pedido do dono: "exibe algumas telas de terminal ainda… ir direto"): entre a página
+  // abrir e a tela de Sessões entrar, o terminal aparecia cru — o ssh conectando, o attach do tmux e a aba que
+  // tinha ficado na frente da última vez. A capa cobre o terminal até o tmux dizer a aba ativa; indo para as
+  // Sessões, fica até a troca de aba. Abaixo da tela de Sessões (#css, z-index 15). Teto de 8 s: erro do login
+  // ("sem a chave do awlsrv", "sem conta do LoginHUB") sai no terminal e precisa ser visto.
+  var CAPA_TETO_MS = 8000;
+  var capa = document.createElement('div');
+  capa.id = 'cs-capa';
+  capa.style.cssText = 'position:fixed;inset:0;z-index:14;display:flex;align-items:center;justify-content:center;' +
+    'color:rgba(242,242,247,.6);font:600 14px -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;' +
+    'letter-spacing:.04em;background:radial-gradient(1100px 520px at 50% 0%,rgba(124,77,255,.20),transparent 60%),#0b0b14';
+  capa.textContent = 'Ω OmegaShell · abrindo…';
+  (document.body || document.documentElement).appendChild(capa);
+  function tiraCapa() { if (capa) { capa.remove(); capa = null; } }
+  setTimeout(tiraCapa, CAPA_TETO_MS);
+
   window.addEventListener('cs-menu', function (ev) {
     var m = ev.detail;
     if (!m || m.tipo !== 'aba') return;
     var abrir = primeira && !recarga;
     primeira = false;
+    // Indo para as Sessões: a capa espera o "aba" da omega (a tela de Sessões entra na mesma hora, por cima).
     if (m.w !== 'omega' && (abrir || m.w === 'conselho' || m.w === 'sh')) sessoes();
+    else tiraCapa();
   });
 
   // Página nova no servidor (27/10/2026): reconstruir o container só reconecta o terminal, e a página continuava
