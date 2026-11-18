@@ -368,7 +368,17 @@
     canc.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
     canc.addEventListener('click', function () { cancela(); t.focus(); });
     var rod = document.createElement('div'); rod.className = 'rodape';
-    rod.appendChild(canc);   // o ⌂ Início saiu em 12/11/2026 (pedido do dono: sem página inicial)
+    // ⌂ Início de volta em todo painel (18/11/2026, pedido do dono: "faltou o botão de início que sumiu dos menus"; tinha
+    // saído em 12/11 com a página inicial): fecha o menu (Esc no do tmux) e leva à tela de Sessões, o início de hoje.
+    var ini = document.createElement('button'); ini.type = 'button'; ini.tabIndex = -1; ini.className = 'ini';
+    ini.textContent = '⌂ Início';
+    ini.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
+    ini.addEventListener('click', function () {
+      if (menu && menu.tipo === 'tmux') { some(); digita('\x1b'); } else { aberto = segura = false; mostra(); }
+      if (window.csSessoes) window.csSessoes();
+      t.focus();
+    });
+    rod.appendChild(canc); rod.appendChild(ini);
     painel.appendChild(rod);
     var h = document.createElement('div'); h.className = 'h';
     h.textContent = segura && menu.id === 'cor' ? '⌥ segurado: C próxima cor · ⇧C volta · ⏎ aplicar · esc cancela'
