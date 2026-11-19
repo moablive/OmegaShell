@@ -35,11 +35,13 @@
     '#css .a:hover{background:rgba(255,255,255,.12);border-color:rgba(179,136,255,.5)}',
     '#css .a kbd{font:600 10px ui-monospace,Menlo,monospace;color:#14141f;background:rgba(179,136,255,.9);border-radius:5px;padding:0 4px}',
     // Conta logada (19/11/2026, pedido do dono: "não mostra meu ícone de usuário logado"): círculo com as iniciais, nome
-    // e papel de quem entrou pelo LoginHUB, antes das ações do topo. O hub não guarda foto, por isso as iniciais.
+    // e papel de quem entrou pelo LoginHUB, antes das ações do topo. A foto de perfil vem do gateway (/_cs/foto, que
+    // a busca no app de perfil); sem foto, ficam as iniciais.
     '#css .eu{display:inline-flex;align-items:center;gap:9px;padding:5px 13px 5px 5px;border-radius:999px;',
     'background:rgba(36,36,46,.75);border:1px solid rgba(179,136,255,.35);max-width:260px;box-sizing:border-box}',
     '#css .eu b{width:30px;height:30px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;',
     'font:700 12px system-ui,sans-serif;color:#14141f;background:linear-gradient(135deg,#b388ff,#3bc9db)}',
+    '#css .eu b img{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}',
     '#css .eu div{min-width:0;line-height:1.2}',
     '#css .eu span,#css .eu small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
     '#css .eu span{font-size:13px;font-weight:600}',
@@ -241,6 +243,26 @@
     return { nome: nome, ini: ini || '?', papel: String(u.role || ''), email: String(u.email || '') };
   }
 
+  // Foto de perfil da conta logada: pedida uma vez ao gateway (cookie da sessão) e reaproveitada a cada redesenho.
+  var fotoConta = null, fotoPedida = false;
+  function pedeFoto() {
+    if (fotoPedida) return;
+    fotoPedida = true;
+    fetch('/_cs/foto', { credentials: 'same-origin', cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || typeof d.foto !== 'string' || d.foto.indexOf('data:image/') !== 0) return;
+        fotoConta = d.foto;
+        var b = w.querySelector('.eu b');
+        if (b) poeFoto(b);
+      })
+      .catch(function () {});
+  }
+  function poeFoto(b) {
+    var im = document.createElement('img'); im.alt = ''; im.src = fotoConta;
+    b.textContent = ''; b.appendChild(im);
+  }
+
   function sessoes() { return menu ? menu.i.filter(function (it) { return it.e !== 'servidor' && it.g !== 'ações' && teclas(it.k); }) : []; }
   function modo() { return MODO[menu && menu.id] || MODO.menu; }
 
@@ -254,7 +276,8 @@
     var eu = conta();
     if (eu) {
       var sel = tag('div', 'eu', null, ac); sel.title = eu.email || eu.nome;
-      tag('b', null, eu.ini, sel);
+      var rosto = tag('b', null, eu.ini, sel);
+      if (fotoConta) poeFoto(rosto); else pedeFoto();
       var et = tag('div', null, null, sel); tag('span', null, eu.nome, et);
       if (eu.papel) tag('small', null, eu.papel, et);
     }

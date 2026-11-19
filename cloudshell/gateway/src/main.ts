@@ -8,6 +8,7 @@
  *   POST /sessao   Bearer <JWT do hub>  → confere e grava o cookie
  *   GET  /verificar (cookie)            → 204 ou 401
  *   POST /sair                          → apaga o cookie
+ *   GET  /foto     (cookie)            → { foto } da conta logada (data URL ou null)
  *
  * A conferência é a do auth-kit: verifyHubToken (assinatura, tenant, recusa os
  * passes de etapa única — o 2FA não se pula) + piso de revogação do hub.
@@ -31,6 +32,49 @@ const revogacao = criarVerificadorDeRevogacao({
   baseUrl: process.env.LOGINHUB_API_URL ?? 'http://server_loginhub_backend:3000/api',
   ttlMs: 15_000,
 });
+
+// Foto de perfil da conta logada (19/11/2026, pedido do dono: "a mesma foto que o MoneyAPP usa"). O hub não guarda
+// foto: ela mora no app de perfil (o MoneyAPP), que a entrega só a consumidor de serviço com o escopo de foto, pela
+// rede interna, para a conta que consentiu. As contas do hub são por app, então o elo é declarado aqui:
+// PERFIL_FOTO_CONTAS = "<e-mail da sessão>=<id da conta no app de perfil>,…". Sem as três variáveis, sem foto.
+const FOTO_URL = process.env.PERFIL_FOTO_URL ?? '';
+const FOTO_CHAVE = process.env.PERFIL_FOTO_KEY ?? '';
+const FOTO_CONTAS = new Map<string, string>(
+  (process.env.PERFIL_FOTO_CONTAS ?? '')
+    .split(',')
+    .map((par) => par.trim().split('='))
+    .filter((par): par is [string, string] => par.length === 2 && par[0].length > 0 && /^[0-9]{1,12}$/.test(par[1]))
+    .map(([email, id]) => [email.toLowerCase(), id]),
+);
+const FOTO_TTL_MS = 60_000;
+const FOTO_MAX = 400_000;
+const fotoCache = new Map<string, { foto: string | null; ate: number }>();
+
+/** Foto da conta (data URL) ou null. Nunca lança: sem foto, o selo fica com as iniciais. */
+async function fotoDaConta(email: string): Promise<string | null> {
+  const id = FOTO_CONTAS.get(email.toLowerCase());
+  if (!FOTO_URL || !FOTO_CHAVE || !id) return null;
+  const guardada = fotoCache.get(id);
+  if (guardada && guardada.ate > Date.now()) return guardada.foto;
+  let foto: string | null = null;
+  try {
+    const r = await fetch(FOTO_URL, {
+      headers: { 'x-api-key': FOTO_CHAVE, 'x-user-id': id },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (r.ok) {
+      const corpo: unknown = await r.json();
+      const f = corpo && typeof corpo === 'object' ? (corpo as { foto?: unknown }).foto : null;
+      if (typeof f === 'string' && f.length <= FOTO_MAX && /^data:image\/(webp|jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(f)) foto = f;
+    } else {
+      console.error(`[cloudshell-gateway] foto de perfil: o app respondeu ${r.status}`);
+    }
+  } catch (err) {
+    console.error('[cloudshell-gateway] foto de perfil:', (err as Error)?.message ?? err);
+  }
+  fotoCache.set(id, { foto, ate: Date.now() + FOTO_TTL_MS });
+  return foto;
+}
 
 function responder(res: ServerResponse, status: number, corpo?: object, headers: Record<string, string> = {}) {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers });
@@ -115,6 +159,13 @@ const servidor = createServer(async (req, res) => {
       return responder(res, 204, undefined, {
         'Set-Cookie': `${COOKIE}=${token}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Strict`,
       });
+    }
+
+    if (req.method === 'GET' && rota === '/foto') {
+      const token = cookieDoRequest(req);
+      if (!token) return responder(res, 401, { error: 'unauthorized' });
+      const conta = await conferir(token);
+      return responder(res, 200, { foto: await fotoDaConta(conta.email) });
     }
 
     if (req.method === 'POST' && rota === '/sair') {
