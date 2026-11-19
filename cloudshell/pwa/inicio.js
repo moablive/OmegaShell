@@ -9,6 +9,19 @@
 (function () {
   'use strict';
 
+  // Viewport (18/11/2026, pedido do dono: "ajustar todo o omega shell para mobile"; plano do 🎨 UI): a página do ttyd
+  // não tem <meta name=viewport>, e o celular desenhava tudo a 980 px e encolhia (texto ilegível; os @media de
+  // sessoes.js e botoes.js nunca disparavam). O sub_filter do nginx está no limite, então ela entra por aqui.
+  // Sem maximum-scale/user-scalable: o pinça-zoom continua (HIG, ampliação até 200%). viewport-fit=cover libera o
+  // env(safe-area-inset-*); interactive-widget=resizes-content faz o teclado virtual encolher o terminal, não cobri-lo.
+  // No computador width=device-width é o comportamento que já havia.
+  if (!document.querySelector('meta[name=viewport]')) {
+    var vp = document.createElement('meta');
+    vp.name = 'viewport';
+    vp.content = 'width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content';
+    (document.head || document.documentElement).appendChild(vp);
+  }
+
   // A tela de Sessões (sessoes.js) entra por aqui: o sub_filter do nginx.conf já está no limite de tamanho.
   // logos.js (os logos dos servidores embutidos, gerado por pwa/servidores/gerar-logos.sh) vem antes, em ordem.
   // rede.js (30/10/2026): conexão que não trava na troca de Wi-Fi.

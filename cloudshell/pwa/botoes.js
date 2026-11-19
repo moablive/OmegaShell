@@ -123,7 +123,15 @@
     'backdrop-filter:blur(18px);color:#f2f2f7;font:600 13px system-ui,sans-serif;cursor:pointer}',
     '#csb-v.on{display:block}',
     '@media (max-width:600px){#csb .b{width:82px;padding:10px 4px 8px}#csb .e{font-size:32px;line-height:40px;height:40px}',
-    '#csb .r,#csb .d{max-width:76px}#csb .h{display:none}}'
+    '#csb .r,#csb .d{max-width:76px}#csb .h{display:none}',
+    // Celular (18/11/2026, plano do 🎨 UI): campo de 16 px (sem zoom do iPhone ao focar), Cancelar/Início com 44 px, e o
+    // ⌥⇥ vai para a esquerda (à direita ficava por cima do ✏️ do servidor e do ✕ dos cartões), com 44 px, opaco
+    // (a 60% o rótulo não chegava a 4,5:1 de contraste) e acima da barra inicial do iPhone (HIG, área segura).
+    '#csb .i{font-size:16px}#csb .ini{min-height:44px;box-sizing:border-box;padding:12px 16px;font-size:14px}',
+    '#csb-v{left:12px;right:auto;bottom:calc(14px + env(safe-area-inset-bottom));opacity:.92;min-width:44px;',
+    'min-height:44px;padding:0 12px;border-radius:16px;font-size:15px}#csb-v.on{display:flex;align-items:center;justify-content:center}}',
+    // Reduzir movimento: o painel entra sem escala (Astryx reduced-motion).
+    '@media (prefers-reduced-motion:reduce){#csb .p{animation:none}#csb .b,#csb .e{transition:none}}'
   ].join('');
 
   // Tecla do item: até 4 letras/números (ou < >) com ⏎ opcional, ou só ⏎, Esc, Home, End.

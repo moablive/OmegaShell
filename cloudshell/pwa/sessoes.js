@@ -34,6 +34,16 @@
     'transition:background .15s,border-color .15s}',
     '#css .a:hover{background:rgba(255,255,255,.12);border-color:rgba(179,136,255,.5)}',
     '#css .a kbd{font:600 10px ui-monospace,Menlo,monospace;color:#14141f;background:rgba(179,136,255,.9);border-radius:5px;padding:0 4px}',
+    // Conta logada (19/11/2026, pedido do dono: "não mostra meu ícone de usuário logado"): círculo com as iniciais, nome
+    // e papel de quem entrou pelo LoginHUB, antes das ações do topo. O hub não guarda foto, por isso as iniciais.
+    '#css .eu{display:inline-flex;align-items:center;gap:9px;padding:5px 13px 5px 5px;border-radius:999px;',
+    'background:rgba(36,36,46,.75);border:1px solid rgba(179,136,255,.35);max-width:260px;box-sizing:border-box}',
+    '#css .eu b{width:30px;height:30px;flex:none;border-radius:50%;display:flex;align-items:center;justify-content:center;',
+    'font:700 12px system-ui,sans-serif;color:#14141f;background:linear-gradient(135deg,#b388ff,#3bc9db)}',
+    '#css .eu div{min-width:0;line-height:1.2}',
+    '#css .eu span,#css .eu small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '#css .eu span{font-size:13px;font-weight:600}',
+    '#css .eu small{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(179,136,255,.9)}',
     '#css .srv{margin-top:16px;border-radius:22px;padding:16px;background:rgba(28,26,40,.72);',
     'border:1px solid rgba(255,255,255,.08);box-shadow:0 14px 40px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.05)}',
     '#css .cab{display:flex;align-items:center;gap:14px;margin-bottom:12px}',
@@ -114,7 +124,44 @@
     '#css .rod{margin-top:16px;text-align:center;font-size:11px;color:rgba(242,242,247,.4)}',
     '#css .num{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:8px 16px;border-radius:12px;',
     'background:rgba(179,136,255,.95);color:#14141f;font:700 15px ui-monospace,Menlo,monospace;display:none}',
-    '@media (max-width:600px){#css h1{font-size:22px}#css .gr{grid-template-columns:1fr}#css .rod{display:none}}'
+    // Celular (18/11/2026, pedido do dono; plano do 🎨 UI, Apple HIG + Astryx). Só valia depois da meta viewport do
+    // inicio.js. Alvo de toque de 44 px (HIG) crescendo o botão, não o desenho (Astryx iconography DR7/DR9); texto de
+    // 13 px para cima; o atalho de teclado (kbd) some, que celular não tem teclado (Astryx iconography DR2).
+    '@media (max-width:600px){',
+    '#css h1{font-size:22px}#css .gr{grid-template-columns:1fr}#css .rod{display:none}',
+    '#css .w{padding:18px 16px calc(84px + env(safe-area-inset-bottom))}',
+    '#css .marca{font-size:12px}#css h1 small{font-size:14px}',
+    // Topo: Renomear e Fechar perguntam "qual sessão?" no painel (funcionam no toque); grade de 2, Atualizar embaixo.
+    '#css .topo{flex-direction:column;align-items:stretch;gap:14px}',
+    '#css .acoes{display:grid;grid-template-columns:1fr 1fr;gap:10px}',
+    '#css .a{justify-content:center;min-height:44px;padding:10px 16px;font-size:15px;border-radius:14px}',
+    '#css .a.k-a{grid-column:1/-1}#css .a kbd{display:none}',
+    '#css .eu{grid-column:1/-1;max-width:none;justify-self:start}',
+    '#css .aviso{font-size:14px;padding:12px 14px}',
+    // Cabeçalho do servidor: o nome quebrava em 3 linhas ("Bonato / & / Ferraz") dividindo a linha com o logo e os
+    // 4 botões; os botões descem para uma linha própria, na mesma ordem de leitura (Astryx template-composition DR6).
+    '#css .cab{flex-wrap:wrap;gap:12px}#css .cab>div:not(.logo):not(.ord){min-width:0;flex:1}',
+    '#css .logo.tem{max-width:96px}#css .logo img{max-width:84px}',
+    '#css .nm{font-size:17px;overflow-wrap:anywhere}#css .st{font-size:13px}',
+    '#css .ord{flex-basis:100%;margin-left:0;justify-content:flex-end;gap:8px}',
+    '#css .ord span{width:44px;height:44px;border-radius:14px;font-size:17px}#css .ord span.mais{font-size:24px}',
+    // Cartão: ✕ com 44 px, o nº ao lado dele, Sim/Não com 44 de altura.
+    '#css .s{padding:14px 44px 14px 14px}#css .s.fc{padding-right:88px}',
+    '#css .s .r{font-size:15px;word-break:normal;overflow-wrap:anywhere}#css .s .d{font-size:13px}',
+    '#css .s .k{font-size:12px;line-height:20px;min-width:20px;border-radius:7px}#css .s.fc .k{right:56px}',
+    '#css .s .fx{width:44px;height:44px;right:6px;border-radius:14px;font-size:15px}',
+    '#css .s .ac{gap:10px;margin-top:10px}#css .s .ac span{min-height:44px;box-sizing:border-box;display:inline-flex;',
+    'align-items:center;padding:0 16px;border-radius:12px;font-size:15px;white-space:nowrap}',
+    '#css .sub{font-size:13px}#css .vazio{font-size:14px}',
+    // Modal ✏️ Nome na tela: campo de 16 px (abaixo disso o iPhone dá zoom ao focar; Astryx mobile-typography DR1).
+    '#css .nmv input{font-size:16px;padding:13px 14px}#css .nmv .bts button{min-height:44px;padding:0 16px;font-size:15px}',
+    '#css .nmv .c{font-size:12px}#css .nmv .h{font-size:13px}',
+    '}',
+    // Toque: estado de apertado (o :hover não existe no dedo; Astryx user-states).
+    '@media (pointer:coarse){#css .s:active,#css .a:active,#css .ord span:active,#css .s .fx:active,#css .s .ac span:active',
+    '{background:rgba(255,255,255,.20);border-color:rgba(179,136,255,.6)}}',
+    // Reduzir movimento: o painel ✏️ entra só com opacidade (Astryx reduced-motion).
+    '@media (prefers-reduced-motion:reduce){#css .nmv .p{animation:none}#css .s.sel{transform:none}}'
   ].join('');
 
   // Uma configuração por menu do omega: título, contagem, atalhos de letra e o rodapé.
@@ -173,6 +220,27 @@
     im.onerror();
   }
 
+  // Quem está logado: o kit do LoginHUB guarda o perfil (nome, e-mail, papel) no localStorage desta origem ao entrar
+  // (awl_user). Sem ele (sessão antiga), o e-mail e o papel saem do próprio token. Só para mostrar: quem confere a
+  // sessão é o gateway, pelo cookie.
+  function conta() {
+    var u = null;
+    try { u = JSON.parse(localStorage.getItem('awl_user') || 'null'); } catch (e) {}
+    if (!u || typeof u !== 'object') u = {};
+    if (!u.email || !u.role) {
+      try {
+        var corpo = (localStorage.getItem('cloudshell_token') || '').split('.')[1] || '';
+        var j = JSON.parse(atob(corpo.replace(/-/g, '+').replace(/_/g, '/')));
+        u = { nome: u.nome, email: u.email || j.email, role: u.role || j.role };
+      } catch (e) {}
+    }
+    var nome = String(u.nome || '').trim() || String(u.email || '').split('@')[0];
+    if (!nome) return null;
+    var p = nome.split(/[\s._-]+/).filter(Boolean);
+    var ini = ((p[0] || '').charAt(0) + (p.length > 1 ? p[p.length - 1].charAt(0) : '')).toUpperCase();
+    return { nome: nome, ini: ini || '?', papel: String(u.role || ''), email: String(u.email || '') };
+  }
+
   function sessoes() { return menu ? menu.i.filter(function (it) { return it.e !== 'servidor' && it.g !== 'ações' && teclas(it.k); }) : []; }
   function modo() { return MODO[menu && menu.id] || MODO.menu; }
 
@@ -183,8 +251,16 @@
     tag('div', 'marca', 'Astral Wave · OmegaShell', tt);
     var M = modo(), h = tag('h1', null, M.titulo, tt); tag('small', null, M.conta(lista.length) + ' · ao vivo', h);
     var ac = tag('div', 'acoes', null, topo);
+    var eu = conta();
+    if (eu) {
+      var sel = tag('div', 'eu', null, ac); sel.title = eu.email || eu.nome;
+      tag('b', null, eu.ini, sel);
+      var et = tag('div', null, null, sel); tag('span', null, eu.nome, et);
+      if (eu.papel) tag('small', null, eu.papel, et);
+    }
     function acao(rot, k, fn) {
       var b = tag('button', 'a', null, ac); b.type = 'button'; b.tabIndex = -1;
+      if (k) b.classList.add('k-' + k.replace(/[^a-z0-9]/gi, ''));   // k-r, k-d, k-a: a grade do celular (CSS)
       tag('span', null, rot, b); if (k) tag('kbd', null, k, b);
       b.addEventListener('mousedown', function (e) { e.preventDefault(); });
       b.addEventListener('click', fn);
