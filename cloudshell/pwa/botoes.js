@@ -154,6 +154,8 @@
   // havia o botão do nome sugerido e o véu escondia a pergunta). Item com tecla "✎": o que se digita
   // nele vai para o terminal com Enter, só [A-Za-z0-9._-] (o omega confere de novo); vazio = Enter.
   var TEXTO = '✎', NOME = /^[A-Za-z0-9._-]{0,40}$/;
+  // ⌂ Início: espera entre o Esc que fecha a pergunta do tmux e a tecla das Sessões, e a repetição da tecla.
+  var INICIO_ESC_MS = 150, INICIO_DE_NOVO_MS = 700;
   function campo() { return painel.querySelector('.i'); }
   function envia(c) {
     if (!NOME.test(c.value)) { c.classList.add('ruim'); return; }
@@ -390,10 +392,23 @@
     // tecla das Sessões saíam colados (\e\e[94~), o tmux lia outra tecla, o menu ficava aberto atrás e a tela não
     // mudava. Agora o Esc vai sozinho (fecha a pergunta do tmux, se houver uma: renomear, confirmar) e a tecla das
     // Sessões vai logo depois, já fora do tempo em que o tmux juntaria as duas.
+    // Ainda 19/11/2026 (pedido do dono: "meu botão início ainda está bugado, não voltando para a página inicial"),
+    // medido num tmux à parte: desde que o menu virou tabela de teclas (abas.sh, menu_teclas) o Esc na frente é que
+    // estragava — a tecla das Sessões que chega até ~0,5 s depois dele se perde, e a aba não muda. Agora:
+    //  · menu comum do tmux (tabela de teclas): só a tecla das Sessões, que sai da tabela e troca de aba;
+    //  · pergunta do tmux aberta atrás (campo ✎ de nome, Sim/Não): o Esc fecha a pergunta e a tecla vai depois;
+    //  · pergunta do omega (nova sessão, encerrar…): o mesmo Ctrl-D do ✕ Cancelar e a tecla em seguida.
+    // Se a tela de Sessões não entrou, a tecla vai de novo um pouco depois (cobre a que se perder na rede).
     ini.addEventListener('click', function () {
       var ir = function () { if (window.csSessoes) window.csSessoes(); };
-      if (menu && menu.tipo === 'tmux') { some(); digita('\x1b'); setTimeout(ir, 150); }
+      var pergunta = menu && menu.tipo === 'tmux' &&
+        (menu.id === 'confirma' || menu.i.some(function (it) { return it.k === TEXTO; }));
+      var doOmega = menu && menu.tipo === 'omega' && !/^(menu|sh)$/.test(menu.id || '');
+      if (pergunta) { some(); digita('\x1b'); setTimeout(ir, INICIO_ESC_MS); }
+      else if (doOmega) { some(); digita('\x04'); ir(); }
+      else if (menu && menu.tipo === 'tmux') { some(); ir(); }
       else { aberto = segura = false; mostra(); ir(); }
+      setTimeout(function () { if (!document.querySelector('#css.on')) ir(); }, INICIO_DE_NOVO_MS);
       t.focus();
     });
     rod.appendChild(canc); rod.appendChild(ini);
