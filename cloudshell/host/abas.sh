@@ -23,8 +23,11 @@
 #   abas.sh juntar_por <socket> <@janela> <grupo>   põe as marcadas no grupo
 #   abas.sh renomear <socket> <@janela> <cliente>   o ✏️ Renomear… e o ⌥ R (03/11/2026): pede o nome no campo do painel
 #   abas.sh renomeado  <socket> <@janela>           aba de sessão: renomeia a sessão (omega renomear); comum: apelido @aba_nome
-# Todo menu daqui sai também em botões no navegador (botoes.sh, visual do Cmd+Tab, 26/10/2026): o
-# clique num botão só digita a tecla do item, com o menu do tmux aberto atrás.
+#   abas.sh vizinha  <socket> <@janela> <e|d>       o ⌥ ← / ⌥ → (19/11/2026): vai para a aba à esquerda/direita na barra
+# Todo menu daqui sai em botões no navegador (botoes.sh, visual do Cmd+Tab, 26/10/2026): o clique num botão só
+# digita a tecla do item. Desde 19/11/2026 (pedido do dono: "volta e meia mostra partes do antigo menu dropdown;
+# nada disso deveria ter mais") não há mais o menu em texto do tmux (display-menu) atrás dos botões: as teclas do
+# menu ficam numa tabela de teclas do cliente (menu_teclas, abaixo), que não desenha nada.
 # Só o id da janela (@N) passa pelos comandos: o da sessão ($N) seria expandido pelo sh do run-shell.
 # O grupo é a opção @grupo da janela; a 1ª aba de cada grupo leva @g_ini (rótulo "▦ nome" na barra) e
 # @g_n (quantas); os recolhidos ficam na opção @recolhidos da sessão ("|nome|outro|"), e a barra
@@ -56,6 +59,28 @@ caixa_grupo() { printf "run-shell \"CS_ABRE=1 %s/botoes.sh cliente %s tmux nome-
 # Nome que a aba mostra: o apelido (@aba_nome, do ✏️ Renomear… / ⌥ R), senão o nome da janela.
 NOMEF='#{?@aba_nome,#{@aba_nome},#W}'
 pergunta() { printf "run-shell \"CS_ABRE=1 %s/botoes.sh cliente %s tmux confirma '%s' 'y|✅|Sim||y' 'y|↩️|Não||n'\"" "$lib" "$cliente" "${1//[\'\"\\\$#;]/}"; }
+
+# Menu sem dropdown (19/11/2026): no lugar do display-menu, as teclas do menu viram uma tabela de teclas só deste
+# cliente (csm<nº do pts>) e o cliente entra nela (switch-client -T). Nada é desenhado no terminal: quem mostra o
+# menu são os botões da página. A tabela vale para UMA tecla, como o menu: tecla do menu roda o comando; qualquer
+# outra (Esc, clique na barra, ⌥ ←/→, o ⌂ Início) sai da tabela e é tratada como sempre — o menu aberto não engole
+# mais o clique seguinte nem fica na tela quando os botões somem.
+# Argumentos como os do display-menu: trincas "rótulo" "tecla" "comando"; "" sozinho = separador; rótulo que
+# começa com "-" (depois de expandir os #{…} na janela) = item apagado, sem tecla.
+menu_teclas() {
+  local tab="csm${cliente//[^0-9]/}" rot
+  [[ $tab != csm ]] || return 0
+  t unbind-key -a -q -T "$tab" 2>/dev/null || true
+  while (( $# )); do
+    if [[ -z $1 ]]; then shift; continue; fi
+    (( $# >= 3 )) || break
+    rot=$1
+    [[ $rot == *'#{'* ]] && rot=$(t display -p -t "$w" -- "$rot" 2>/dev/null || true)
+    [[ $rot == -* || -z $2 || -z $3 ]] || t bind-key -T "$tab" "$2" "$3" 2>/dev/null || true
+    shift 3
+  done
+  t switch-client -c "$cliente" -T "$tab" 2>/dev/null || true
+}
 
 # Marca a 1ª aba de cada grupo (@g_ini/@g_n) e tira a marca das outras.
 marca() {
@@ -106,6 +131,27 @@ s=$(t display -p -t "$w" '#{session_id}' 2>/dev/null) || exit 0
 
 case $acao in
   marca|arruma) "$acao" "$s" ;;
+  vizinha)
+    # ⌥ ← / ⌥ → (19/11/2026, pedido do dono): a aba vizinha na barra, dando a volta nas pontas. Só as abas que
+    # aparecem contam: as fixas (@jfixa) e as escondidas de grupo recolhido são puladas. Da tela de Sessões (aba
+    # fixa omega), → vai para a 1ª aba e ← para a última.
+    dir=${4:-}
+    [[ $dir == [ed] ]] || exit 0
+    r=$(t show -v -t "$s" @recolhidos 2>/dev/null || true)
+    vis=() p=-1
+    while IFS='|' read -r j jf jg ji; do
+      [[ -z $jf ]] || continue
+      [[ $j != "$w" && -n $jg && $r == *"|$jg|"* && -z $ji ]] && continue
+      [[ $j == "$w" ]] && p=${#vis[@]}
+      vis+=("$j")
+    done < <(t list-windows -t "$s" -F '#{window_id}|#{@jfixa}|#{@grupo}|#{@g_ini}')
+    n=${#vis[@]}
+    (( n )) || exit 0
+    if (( p < 0 )); then [[ $dir == d ]] && alvo=${vis[0]} || alvo=${vis[n - 1]}
+    elif [[ $dir == d ]]; then alvo=${vis[(p + 1) % n]}
+    else alvo=${vis[(p + n - 1) % n]}
+    fi
+    [[ $alvo == "$w" ]] || t select-window -t "$alvo" ;;
   arrasta)
     # $w = aba ativa (a arrastada), $4 = aba sob o mouse. A cada movimento do mouse o tmux chama de novo: igual =
     # nada; diferente = troca (-d, para a ativa não mudar de índice) e seleciona a arrastada, que assim segue o
@@ -192,14 +238,11 @@ case $acao in
     elif [[ -n $jfixa ]]; then ed_k=- ed_d='aba fixa' ed_cmd=''
     else ed_k=p ed_d='fresh ao lado, nesta pasta' ed_cmd='split-window -h -c "#{pane_current_path}" fresh'
     fi
-    # Reaberto por um clique de mouse no próprio menu: sem a pausa, o tmux ainda está fechando o
-    # menu anterior e fecha o novo junto (com teclado não acontecia).
-    [[ -n $aberto$para ]] && sleep 0.2
     case $aberto in
       tamanho)
         btn tamanho "tamanho do painel · $janela" 'tamanho|◧|Metade||m' 'tamanho|▯|1/3 (estreito)||1' \
           'tamanho|▭|2/3 (largo)||2' 'tamanho|⊞|Igualar todos||i' 'tamanho|⛶|Tela cheia / voltar||z'
-        t display-menu -O -M -c "$cliente" -T '#[align=centre]tamanho do painel ativo' -x R -y S -- \
+        menu_teclas \
           'Metade' m 'resize-pane -x 50%' '1/3 (estreito)' 1 'resize-pane -x 33%' '2/3 (largo)' 2 'resize-pane -x 67%' \
           'Igualar todos' i 'select-layout -E' '' 'Tela cheia / voltar' z 'resize-pane -Z'
         exit 0 ;;
@@ -214,7 +257,7 @@ case $acao in
           bt+=("cor|#$ch|$cn||$ck")   # ícone = a cor: a página desenha uma esfera dela
         done
         btn cor "cor da aba $janela" "${bt[@]}" 'cor|◯|Padrão|sem cor|p'
-        t display-menu -O -M -c "$cliente" -T "#[align=centre]cor da aba $NOMEF" -x R -y S -- \
+        menu_teclas \
           "${args[@]}" '' 'Padrão' p "set -wu -t $w @cor"
         exit 0 ;;
     esac
@@ -303,7 +346,7 @@ case $acao in
       'organizar|▦|Grupo…||g' "organizar|⇄|Mover|$([[ $aberto == mover ]] && echo 'aberto abaixo')|m" \
       'organizar|⇔|Tamanho…||t' \
       "${bmov[@]}"
-    t display-menu -O -M -c "$cliente" -T "#[align=centre]$titulo" -x R -y S -- \
+    menu_teclas \
       "${mabas[@]}" \
       "🖥️ Nova sessão… (servidor e nome)" N "$nova" \
       "+ Nova janela (shell aqui)" n 'new-window -c "#{pane_current_path}"' \
@@ -374,7 +417,7 @@ case $acao in
     while (( i < ${#itens[@]} )); do
       if [[ -z ${itens[i]} ]]; then args+=(""); i=$((i + 1)); else args+=("${itens[i]}" "${itens[i+1]}" "${itens[i+2]}"); i=$((i + 3)); fi
     done
-    t display-menu -O -M -c "$cliente" -T "#[align=centre]agrupar abas ($n marcadas)" -x R -y S -- "${args[@]}" ;;
+    menu_teclas "${args[@]}" ;;
   juntar_ok|juntar_por)
     sel=$(t show -v -t "$w" @juntar 2>/dev/null || true)
     if [[ $acao == juntar_ok ]]; then
@@ -474,6 +517,6 @@ case $acao in
       i=$((i + 3))
     done
     btn grupo "grupo da aba $(t display -p -t "$w" "$NOMEF")" "${bt[@]}"
-    t display-menu -O -M -c "$cliente" -T "#[align=centre]grupo da aba $NOMEF" -x R -y S "${args[@]}" ;;
+    menu_teclas "${args[@]}" ;;
 esac
 exit 0

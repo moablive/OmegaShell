@@ -9,6 +9,9 @@
 // ao tmux o "☰ menu" (\e[96~ = User3), que traz as abas para trocar e as ações. Clicar (ou ←→ e
 // Enter) também serve; Esc fecha. O botão só DIGITA a tecla do item no terminal, a mesma que se
 // digitaria à mão: nenhum comando sai daqui. No celular (sem Option) o ⌥⇥ no canto abre.
+// Desde 19/11/2026 não há menu em texto do tmux atrás dos botões (pedido do dono: "volta e meia mostra partes do
+// antigo menu dropdown"): o "☰ menu" do tmux é só uma tabela de teclas (host/abas.sh, menu_teclas), que não desenha
+// nada e sai sozinha na primeira tecla ou clique. ⌥ ← e ⌥ → passam para a aba vizinha.
 (function () {
   'use strict';
 
@@ -136,7 +139,9 @@
 
   // Tecla do item: até 4 letras/números (ou < >) com ⏎ opcional, ou só ⏎, Esc, Home, End.
   var TECLA = /^([A-Za-z0-9<>]{1,4})?(⏎)?$/;
-  var ESPECIAL = { 'Esc': '\x1b', 'Home': '\x1b[1~', 'End': '\x1b[4~' };
+  // Home e End como o xterm manda (\e[H e \e[F): o tmux não lê \e[1~ / \e[4~ como Home/End com este TERM, e o
+  // ⇤ Para o começo / ⇥ Para o fim do Mover não fazia nada (19/11/2026).
+  var ESPECIAL = { 'Esc': '\x1b', 'Home': '\x1b[H', 'End': '\x1b[F' };
   function teclas(k) {
     if (!k || k === '-') return null;
     if (ESPECIAL[k]) return ESPECIAL[k];
@@ -381,9 +386,14 @@
     var ini = document.createElement('button'); ini.type = 'button'; ini.tabIndex = -1; ini.className = 'ini';
     ini.textContent = '⌂ Início';
     ini.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
+    // 19/11/2026 (pedido do dono: "o botão de ir para o início ainda não funciona bem"): num menu do tmux o Esc e a
+    // tecla das Sessões saíam colados (\e\e[94~), o tmux lia outra tecla, o menu ficava aberto atrás e a tela não
+    // mudava. Agora o Esc vai sozinho (fecha a pergunta do tmux, se houver uma: renomear, confirmar) e a tecla das
+    // Sessões vai logo depois, já fora do tempo em que o tmux juntaria as duas.
     ini.addEventListener('click', function () {
-      if (menu && menu.tipo === 'tmux') { some(); digita('\x1b'); } else { aberto = segura = false; mostra(); }
-      if (window.csSessoes) window.csSessoes();
+      var ir = function () { if (window.csSessoes) window.csSessoes(); };
+      if (menu && menu.tipo === 'tmux') { some(); digita('\x1b'); setTimeout(ir, 150); }
+      else { aberto = segura = false; mostra(); ir(); }
       t.focus();
     });
     rod.appendChild(canc); rod.appendChild(ini);
@@ -479,7 +489,7 @@
 
   function esconde() {
     if (!menu) return;
-    // Menu do tmux aberto atrás: o Esc que ele receberia fecha ele também.
+    // Menu do tmux (tabela de teclas ou pergunta do tmux atrás): o Esc sai dele também.
     if (menu.tipo === 'tmux') { some(); digita('\x1b'); return; }
     aberto = segura = false; mostra();
   }
@@ -786,6 +796,15 @@
       if (e.code !== 'KeyR' || !e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return;
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
       if (!aberto) digita('\x1b[91~');
+    }, true);
+    // ⌥ ← e ⌥ → (19/11/2026, pedido do dono: "coloque um atalho opt + seta para navegar entre as abas"): a aba vizinha
+    // na barra — o tmux (User9/User10) pula as fixas e dá a volta nas pontas; da tela de Sessões, → vai para a 1ª aba
+    // e ← para a última. Com o painel aberto não faz nada; num campo de texto (nome, renomear) as setas são dele.
+    window.addEventListener('keydown', function (e) {
+      if ((e.code !== 'ArrowLeft' && e.code !== 'ArrowRight') || !e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return;
+      if (e.target && e.target.tagName === 'INPUT') return;
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+      if (!aberto) digita(e.code === 'ArrowLeft' ? '\x1b[90~' : '\x1b[89~');
     }, true);
     document.addEventListener('keyup', solta, true);
     window.addEventListener('blur', function () { segura = false; });
