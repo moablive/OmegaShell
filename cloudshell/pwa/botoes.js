@@ -82,6 +82,26 @@
     '#csb .l.lista .d{max-width:40%;flex:none;text-align:right}',
     '#csb .l.lista .k{top:50%;transform:translateY(-50%);right:10px}',
     '#csb .e svg{width:1em;height:1em;vertical-align:middle}',
+    // Menu do botão direito na aba (20/11/2026, pedido do dono: todas as opções juntas num drop down): o menu
+    // "contexto" do abas.sh vira uma lista embaixo da aba clicada, sem o véu — cores, mover e tamanho em fileiras de
+    // ícones (o nome aparece ao parar o mouse) e as ações uma por linha.
+    '#csb.ctx{align-items:flex-start;justify-content:flex-start;background:none;-webkit-backdrop-filter:none;backdrop-filter:none}',
+    '#csb .p.ctx{position:absolute;box-sizing:border-box;width:346px;max-width:94vw;max-height:calc(100vh - 16px);padding:8px 6px;border-radius:14px;',
+    'background:rgba(30,30,40,.96);animation:csb-ctx .12s ease-out}',
+    '@keyframes csb-ctx{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}',
+    '#csb .p.ctx .t{text-align:left;margin:2px 8px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+    '#csb .p.ctx .g{margin:7px 8px 3px;font-size:10px;text-transform:uppercase;color:rgba(242,242,247,.45)}',
+    '#csb .p.ctx .l{justify-content:flex-start;gap:2px;padding:0 4px}',
+    '#csb .p.ctx .b{width:auto;padding:5px;border-radius:9px;gap:0;transition:none}',
+    '#csb .p.ctx .b .r,#csb .p.ctx .b .d,#csb .p.ctx .b .k{display:none}',
+    '#csb .p.ctx .e{font-size:17px;line-height:22px;height:22px;min-width:22px;text-align:center}',
+    '#csb .p.ctx .b.s .e{transform:none}',
+    '#csb .p.ctx .esf{width:20px;height:20px;border-radius:6px;box-shadow:0 2px 4px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.5)}',
+    '#csb .p.ctx .l.lin{flex-direction:column;flex-wrap:nowrap;gap:1px;padding:0}',
+    '#csb .p.ctx .l.lin .b{width:100%;flex-direction:row;align-items:center;gap:9px;padding:5px 10px}',
+    '#csb .p.ctx .l.lin .b .r{display:block;max-width:none;flex:1;text-align:left;font-size:13px;font-weight:500}',
+    '#csb .p.ctx .l.lin .b .d{display:block;max-width:38%;flex:none;text-align:right}',
+    '#csb .p.ctx .n,#csb .p.ctx .h,#csb .p.ctx .rodape{display:none}',
     // Logos na barra de abas (28/10/2026): caixas por cima das marcas da linha de status do tmux.
     // z-index 10: acima das camadas do xterm, abaixo das telas de Sessões/Scripts (#css, 15) e Início (#csi, 30) —
     // com 20 os logos ficavam por cima da tela de Sessões (28/10/2026, print do dono).
@@ -279,6 +299,7 @@
   var pede = false;     // ⌥ Tab numa aba sem menu: o ☰ menu do tmux está a caminho
   var mx = -1, my = -1; // onde o mouse está (27/10/2026): o item embaixo dele é o escolhido…
   var rato = false;     // …até o teclado (Tab, setas) escolher outro; mexer o mouse devolve a vez a ele
+  var ancora = null;    // botão direito numa aba: onde o menu "contexto" vai abrir ({x, y, ate}), até ele chegar
 
   function digita(d) {
     if (t.input) t.input(d, true);
@@ -305,7 +326,12 @@
   function desenha() {
     painel.textContent = '';
     // ~/sh em lista; paleta (cor) em grade de 5 caixinhas por linha.
-    painel.className = 'p' + (LISTA[menu.id] ? ' lista' : '') + (menu.id === 'cor' || menu.id === 'juntar' ? ' cor' : '');
+    // Menu do botão direito: lista embaixo da aba clicada (sem a aba de origem — aberto de outro jeito — fica no meio).
+    var ctx = menu.id === 'contexto', preso = ctx && menu.anc;
+    painel.className = 'p' + (LISTA[menu.id] ? ' lista' : '') + (menu.id === 'cor' || menu.id === 'juntar' ? ' cor' : '') + (ctx ? ' ctx' : '');
+    raiz.classList.toggle('ctx', !!preso);
+    painel.style.left = painel.style.top = '';
+    painel.style.position = ctx && !preso ? 'static' : '';
     var tt = document.createElement('div'); tt.className = 't'; tt.textContent = menu.t || '';
     painel.appendChild(tt);
     var grupos = [], ult = null;
@@ -321,7 +347,7 @@
         logoServidor(g, gr.g.replace(/ · ↻ reutilizáveis$/, '').replace(/ \(.*\)$/, ''), 22, true);
         g.appendChild(document.createTextNode(gr.g));
       }
-      var l = document.createElement('div'); l.className = 'l' + (emLista(gr) ? ' lista' : '');
+      var l = document.createElement('div'); l.className = 'l' + (emLista(gr) ? ' lista' : '') + (ctx && gr.g === 'ações' ? ' lin' : '');
       gr.n.forEach(function (n) {
         var it = menu.i[n], b;
         if (it.k === TEXTO) {
@@ -337,6 +363,7 @@
         }
         b = document.createElement('button');
         b.type = 'button'; b.tabIndex = -1; b.className = 'b' + (teclas(it.k) ? '' : ' x'); b.dataset.n = n;
+        if (ctx) b.title = (it.r || '') + (it.d ? ' · ' + it.d : '');   // fileiras só de ícones: o nome ao parar o mouse
         // ⌥ G (agrupar): a aba marcada leva o ✓ na caixinha.
         if (menu.id === 'juntar' && /^✓/.test(it.d || '')) b.classList.add('marcado');
         var e = document.createElement('span'); e.className = 'e';
@@ -421,6 +448,10 @@
     painel.appendChild(h);
     sobMouse();
     marca();
+    if (preso) {   // dentro da tela: encosta na borda direita ou sobe se não couber
+      painel.style.left = Math.max(4, Math.min(preso.x, window.innerWidth - painel.offsetWidth - 6)) + 'px';
+      painel.style.top = Math.max(4, Math.min(preso.y, window.innerHeight - painel.offsetHeight - 6)) + 'px';
+    }
     var c = campo();
     // Campo de texto: foco nele sempre (03/11/2026, pedido do dono: aberto pelo ⌥ Tab com o Option ainda apertado, o
     // foco ficava no terminal e a 1ª letra fechava o painel e caía na pergunta em texto do tmux).
@@ -438,6 +469,7 @@
   function mostra() {
     if (!menu) aberto = segura = false;
     raiz.classList.toggle('on', aberto);
+    if (!aberto) raiz.classList.remove('ctx');
     volta.classList.toggle('on', !aberto);
     capa(aberto && menu.tipo === 'tmux' && menu.i.some(function (it) { return it.k === TEXTO; }));
   }
@@ -492,7 +524,7 @@
   function escolhe(n) {
     var it = menu && menu.i[n], d = it && teclas(it.k);
     if (!d) return;
-    var comTabela = menu.tipo === 'tmux' && /^(painel|tamanho|cor|juntar|grupo)$/.test(menu.id || '');
+    var comTabela = menu.tipo === 'tmux' && /^(painel|tamanho|cor|juntar|grupo|contexto)$/.test(menu.id || '');
     // ⏻ Encerrar aba (painel, e) e o "Sim, fechar" do omega (fechar, s⏎): a aba que sumir no próximo
     // minuto e meio sai com o efeito vermelho de excluir (28/10/2026, pedido do dono).
     if ((menu.id === 'painel' && it.k === 'e') || (menu.id === 'fechar' && /^s/i.test(it.k))) excluirAte = Date.now() + 90000;
@@ -548,6 +580,8 @@
     // ~/sh o Claude roda sozinho). O omega ainda manda a ação "s⏎" no menu das sessões; ela sai aqui.
     if (m.tipo === 'omega' && m.id === 'menu') m.i = m.i.filter(function (it) { return !(it.g === 'ações' && it.k === 's⏎'); });
     var mesmo = menu && menu.id === m.id, k = mesmo && menu.i[sel] ? menu.i[sel].k : null;
+    // Menu do botão direito: fica preso à aba clicada (o lugar guardado no clique vale uns segundos).
+    if (m.id === 'contexto') { m.anc = ancora && Date.now() < ancora.ate ? ancora : null; ancora = null; }
     menu = m; bruto = dados;
     avisa(m);
     sel = -1;
@@ -784,6 +818,17 @@
     t.element.addEventListener('mousemove', barraMouse, true);
     t.element.addEventListener('mouseleave', function () { barraMouse({ clientX: -1, clientY: -1 }); }, true);
     t.element.addEventListener('mousedown', barraClique, true);
+    // Botão direito numa aba (20/11/2026): o tmux (MouseDown3Status) passa para ela e manda o menu "contexto", que abre
+    // embaixo da aba; aqui fica guardado o lugar, e o menu do navegador não aparece em cima da barra.
+    t.element.addEventListener('mousedown', function (e) {
+      if (e.button !== 2) return;
+      var nome = abaNoMouse(e), tela = t.element.querySelector('.xterm-screen'), a = null;
+      abasAgora.forEach(function (x) { if (x.nome === nome) a = x; });
+      if (!a || !tela) return;
+      var r = tela.getBoundingClientRect();
+      ancora = { x: r.left + a.x * (r.width / t.cols), y: r.top + (barraDupla ? 2 : 1) * (r.height / t.rows) + 3, ate: Date.now() + 4000 };
+    }, true);
+    t.element.addEventListener('contextmenu', function (e) { if (abaNoMouse(e)) e.preventDefault(); }, true);
     barraAgenda();
   }
 

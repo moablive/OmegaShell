@@ -11,7 +11,7 @@
 #   abas.sh arrasta  <socket> <@ativa> <@alvo>      arrastar pela barra (30/10/2026): troca a aba ativa (a
 #                                                   arrastada) com a que está sob o mouse e segue nela
 #   abas.sh apagar   <socket> <@janela> <grupo>     apaga o grupo: as abas dele ficam, soltas (26/10/2026)
-#   abas.sh painel   <socket> <@janela> <cliente> [mover [e|d|c|f] | tamanho | cor]
+#   abas.sh painel   <socket> <@janela> <cliente> [mover [e|d|c|f] | tamanho | cor | contexto [e|d|c|f]]
 #                                                   o "☰ menu" da barra (26/10/2026); "mover" abre o dropdown
 #                                                   ← → ⇤ ⇥ dentro dele, que fica aberto a cada clique; Esc fecha;
 #                                                   "tamanho" e "cor" abrem o 2º menu no mesmo lugar
@@ -205,7 +205,7 @@ case $acao in
     cliente=${4:-}
     if [[ $acao == mover ]]; then aberto=mover para=${5:-}; else aberto=${5:-} para=${6:-}; fi
     [[ $cliente =~ ^/dev/pts/[0-9]+$ ]] || exit 0
-    [[ -z $aberto || $aberto == @(mover|tamanho|cor) ]] || exit 0
+    [[ -z $aberto || $aberto == @(mover|tamanho|cor|contexto) ]] || exit 0
     [[ -z $para || $para == [edcf] ]] || exit 0
     base="$lib/abas.sh painel $sock $w $cliente"
     titulo="aba $NOMEF"
@@ -263,7 +263,7 @@ case $acao in
     esac
     mov=("⇄ Mover ▸" m "run-shell \"$base mover\"")
     bmov=()
-    if [[ $aberto == mover ]]; then
+    if [[ $aberto == mover || $aberto == contexto ]]; then
       # Só as abas que aparecem na barra contam como vizinhas: fixas (@jfixa) e as escondidas de
       # grupo recolhido (menos a 1ª, o "▸ nome") são puladas, para cada clique mexer a aba de verdade.
       visiveis() {
@@ -305,6 +305,50 @@ case $acao in
            "${fim}     ⇥ Para o fim"      End   "run-shell \"$base mover f\"")
       bmov=("mover · $((p + 1)) de $n|←|Para a esquerda||${ini:-<}" "mover · $((p + 1)) de $n|→|Para a direita||${fim:->}"
             "mover · $((p + 1)) de $n|⇤|Para o começo||${ini:-Home}" "mover · $((p + 1)) de $n|⇥|Para o fim||${fim:-End}")
+    fi
+    if [[ $aberto == contexto ]]; then
+      # Menu do botão direito na aba (20/11/2026, pedido do dono: "um menu ao clicar com o direito do mouse na aba,
+      # com todas as opções juntas num drop down"): cor, mover, tamanho e as ações da aba num menu só, sem 2º menu
+      # (só o ▦ Grupo…, que depende dos grupos que existem). A página (pwa/botoes.js) desenha como lista embaixo da
+      # aba clicada. Teclas próprias, sem repetir: cores em maiúsculas (as minúsculas são das ações), tamanho M 1 2 E F.
+      # "contexto e|d|c|f" = o mover já feito acima: não reabre nada.
+      [[ -z $para ]] || exit 0
+      [[ -z $jfixa ]] || exit 0
+      args=() bt=()
+      for c in Vermelho:V:ff5c7a Laranja:L:ffa94d Amarelo:A:ffd43b Verde:G:69db7c Azul:Z:4dabf7 \
+               Ciano:C:3bc9db Rosa:R:f783ac Cinza:I:adb5bd; do
+        IFS=: read -r cn ck ch <<< "$c"
+        args+=("$cn" "$ck" "set -w -t $w @cor \"#$ch\"")
+        bt+=("cor|#$ch|$cn||$ck")
+      done
+      btn contexto "aba $janela" "${bt[@]}" 'cor|◯|Padrão|sem cor|P' \
+        "mover · $((p + 1)) de $n|←|Para a esquerda||${ini:-<}" "mover · $((p + 1)) de $n|→|Para a direita||${fim:->}" \
+        "mover · $((p + 1)) de $n|⇤|Para o começo||${ini:-Home}" "mover · $((p + 1)) de $n|⇥|Para o fim||${fim:-End}" \
+        'tamanho do painel|◧|Metade||M' 'tamanho do painel|▯|1/3 (estreito)||1' 'tamanho do painel|▭|2/3 (largo)||2' \
+        'tamanho do painel|⊞|Igualar todos||E' 'tamanho do painel|⛶|Tela cheia / voltar||F' \
+        'ações|✏️|Renomear…||r' 'ações|▦|Grupo…||g' 'ações|⫼|Dividir||d' 'ações|➕|Nova janela|shell aqui|n' \
+        'ações|🖥️|Nova sessão…|servidor e nome|N' \
+        "ações|✎|Abrir projeto no editor|$ed_d|$ed_k" "ações|⌧|Fechar editor|$fe_d|$fe_k" \
+        "ações|✕|Fechar shell|${pfixa:+aba fixa}|$([[ -n $pfixa ]] && echo - || echo x)" \
+        "ações|⏻|Encerrar aba|$enc_d|$enc_k"
+      menu_teclas \
+        "${args[@]}" 'Padrão' P "set -wu -t $w @cor" \
+        "${ini}← Para a esquerda" "<"  "run-shell \"$base contexto e\"" \
+        "${fim}→ Para a direita"  ">"  "run-shell \"$base contexto d\"" \
+        "${ini}⇤ Para o começo"   Home "run-shell \"$base contexto c\"" \
+        "${fim}⇥ Para o fim"      End  "run-shell \"$base contexto f\"" \
+        'Metade' M 'resize-pane -x 50%' '1/3 (estreito)' 1 'resize-pane -x 33%' '2/3 (largo)' 2 'resize-pane -x 67%' \
+        'Igualar todos' E 'select-layout -E' 'Tela cheia / voltar' F 'resize-pane -Z' \
+        "✏️ Renomear…" r "run-shell \"$lib/abas.sh renomear $sock $w $cliente\"" \
+        "▦ Grupo…" g "run-shell \"$lib/abas.sh menu $sock $w $cliente\"" \
+        "⫼ Dividir" d 'split-window -h -c "#{pane_current_path}"' \
+        "+ Nova janela (shell aqui)" n 'new-window -c "#{pane_current_path}"' \
+        "🖥️ Nova sessão… (servidor e nome)" N "$nova" \
+        "✎ Abrir projeto no editor (fresh)" p "$ed_cmd" \
+        "$([[ -n $fe_cmd ]] || echo -)⌧ Fechar editor" f "$fe_cmd" \
+        "#{?@pfixa,-,}✕ Fechar shell" x "$(pergunta "fechar este shell ($janela)?") ; confirm-before -p \"fechar este shell (#W)? y/n\" kill-pane" \
+        "⏻ Encerrar aba" e "$enc_cmd"
+      exit 0
     fi
     # Abas para trocar (o ⌥ Tab do navegador abre este menu nas abas sem menu próprio, como o Cmd+Tab):
     # a última usada primeiro — ⌥ Tab e soltar volta para ela —, depois as outras na ordem da barra;
