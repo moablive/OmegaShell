@@ -1080,6 +1080,15 @@
     }, true);
     // Clique no terminal com um menu do tmux aberto: o tmux fecha ou escolhe nele; os botões saem.
     t.element.addEventListener('mousedown', function () { if (menu && menu.tipo === 'tmux') some(); }, true);
+    // Mouse passando pelo terminal com um menu do tmux aberto (20/11/2026, pedido do dono: "não está mudando de cor
+    // as abas"): o Claude Code pede o movimento do mouse (modo 1003) e o xterm manda cada passo ao tmux. Medido num
+    // tmux à parte: o movimento em cima da barra de abas ou da faixa do painel é uma tecla para o tmux, tira o cliente
+    // da tabela de teclas do menu (abas.sh, menu_teclas, 19/11/2026) e a tecla do botão — a cor da paleta do ⌥ C, um
+    // item do ⌥ Tab — caía no terminal como letra, sem fazer nada. O tmux não deixa prender o movimento na tabela
+    // (MouseMove… não é tecla de bind), então com o menu aberto o movimento sem botão não chega ao xterm.
+    t.element.addEventListener('mousemove', function (e) {
+      if (menu && menu.tipo === 'tmux' && !e.buttons) e.stopPropagation();
+    }, true);
   }
 
   var n = 0, i = setInterval(function () {
