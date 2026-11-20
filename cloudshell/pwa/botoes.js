@@ -492,12 +492,17 @@
   function escolhe(n) {
     var it = menu && menu.i[n], d = it && teclas(it.k);
     if (!d) return;
+    var comTabela = menu.tipo === 'tmux' && /^(painel|tamanho|cor|juntar|grupo)$/.test(menu.id || '');
     // ⏻ Encerrar aba (painel, e) e o "Sim, fechar" do omega (fechar, s⏎): a aba que sumir no próximo
     // minuto e meio sai com o efeito vermelho de excluir (28/10/2026, pedido do dono).
     if ((menu.id === 'painel' && it.k === 'e') || (menu.id === 'fechar' && /^s/i.test(it.k))) excluirAte = Date.now() + 90000;
     some();
     // O que esse botão abrir em seguida (2º menu, pergunta do omega) já vem aberto.
     pede = true; setTimeout(function () { pede = false; }, 2000);
+    // Menu do tmux em tabela de teclas (abas.sh, menu_teclas): a tecla "de volta ao menu" (User11 do tmux.conf) vai
+    // colada na frente, para a tecla do item valer mesmo que algo tenha tirado o cliente da tabela antes do clique
+    // (20/11/2026). Pergunta do tmux (Sim/Não, campo de nome) não tem tabela: a tecla vai sozinha.
+    if (comTabela) d = '\x1b[88~' + d;
     digita(d);
     t.focus();
   }
