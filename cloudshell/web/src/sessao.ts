@@ -1,4 +1,5 @@
 import { createHubAuth } from './lib/hubAuthClient';
+import { createCofreEntrada } from './lib/cofreEntrada';
 
 const LOGINHUB_API = import.meta.env.VITE_LOGINHUB_API_URL || 'https://loginhub.example.com/api';
 /** Sem o app_id o hub responde 409 AMBIGUOUS_EMAIL para e-mail repetido entre apps. */
@@ -8,6 +9,24 @@ const APP_ID = import.meta.env.VITE_LOGINHUB_APP_ID as string | undefined;
 export const NOME_NO_HUB = 'CloudShell';
 
 export const hub = createHubAuth({ baseUrl: LOGINHUB_API, appId: APP_ID, tokenKey: 'cloudshell_token' });
+
+/** Entrada pelo cofre do LoginHUB: a chave da conta mora no cofre, que abre com a digital do aparelho. */
+const cofre = createCofreEntrada({ baseUrl: LOGINHUB_API, appId: APP_ID ?? '' });
+
+/** Sai do OmegaShell para o cofre, que assina a entrada. A volta é em `/entrar`, com a assinatura no `#`. */
+export const irAoCofreParaEntrar = (): Promise<void> => cofre.irParaEntrar();
+
+/**
+ * Volta do cofre: troca a assinatura que veio no `#` pela sessão do hub e a guarda no kit;
+ * quem chama segue com `abrirTerminal()`. Devolve `false` quando a tela abriu sem volta do cofre.
+ */
+export async function concluirEntradaPeloCofre(): Promise<boolean> {
+  const sessao = await cofre.concluir();
+  if (!sessao) return false;
+  // O hub pode omitir o `role` aqui; o kit guarda o perfil com o campo sempre presente.
+  hub.salvarSessao({ ...sessao, usuario: sessao.usuario && { ...sessao.usuario, role: sessao.usuario.role ?? '' } });
+  return true;
+}
 
 /**
  * Entrega a sessão do hub ao gateway, que confere (verifyHubToken + piso de

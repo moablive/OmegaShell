@@ -2,7 +2,7 @@
 import { onMounted, ref } from 'vue';
 import GoogleAuthAviso from '@/components/GoogleAuthAviso.vue';
 import TwoFactorEnroll from '@/components/TwoFactorEnroll.vue';
-import { NOME_NO_HUB, abrirTerminal, hub, recusa, traduzir } from '@/sessao';
+import { NOME_NO_HUB, abrirTerminal, concluirEntradaPeloCofre, hub, irAoCofreParaEntrar, recusa, traduzir } from '@/sessao';
 
 /**
  * Login do CloudShell pelo LoginHUB, com os três desfechos do /auth/login:
@@ -20,6 +20,12 @@ const codigo = ref('');
 const usarBackup = ref(false);
 
 onMounted(async () => {
+  // Volta do cofre do LoginHUB: a assinatura veio no `#` e vira sessão antes de qualquer outra coisa.
+  try {
+    await concluirEntradaPeloCofre();
+  } catch (e) {
+    erro.value = traduzir(e);
+  }
   // Sessão guardada (ou renovável) abre o terminal direto.
   try {
     const aberto = await abrirTerminal();
@@ -49,6 +55,19 @@ async function entrar() {
     erro.value = traduzir(e);
   } finally {
     senha.value = '';
+    carregando.value = false;
+  }
+}
+
+async function entrarPeloCofre() {
+  if (carregando.value) return;
+  carregando.value = true;
+  erro.value = null;
+  try {
+    // A página sai do OmegaShell; `carregando` só volta se o cofre não abriu.
+    await irAoCofreParaEntrar();
+  } catch (e) {
+    erro.value = traduzir(e);
     carregando.value = false;
   }
 }
@@ -118,6 +137,8 @@ async function enrolado() {
       <input v-model="senha" type="password" required autocomplete="current-password" placeholder="Senha" />
       <p v-if="erro" class="erro">{{ erro }}</p>
       <button type="submit" :disabled="carregando">{{ carregando ? 'Entrando…' : 'Entrar' }}</button>
+      <!-- Entrada pelo cofre do LoginHUB: o cofre abre com a digital do aparelho e assina a entrada. -->
+      <button type="button" class="link" :disabled="carregando" @click="entrarPeloCofre">Entrar pelo cofre do LoginHUB</button>
       <p class="nota">Login da Astral Wave (LoginHUB) com verificação em duas etapas.</p>
     </form>
   </div>

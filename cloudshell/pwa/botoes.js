@@ -782,6 +782,256 @@
     barraAgenda();
   }
 
+  // ---- Toque no celular (19/11/2026, pedido do dono: "o omega shell mobile não funciona direito o touch screen e não
+  // consigo mudar de aba no terminal"). Medido num iPhone simulado com toque de verdade (CDP dispatchTouchEvent):
+  //  - tocar numa aba visível da barra JÁ trocava (o toque vira clique e o tmux recebe o MouseDown1Status);
+  //  - arrastar o dedo NÃO rolava nada: o xterm só converte a roda do mouse em rolagem do tmux, e toque não é roda;
+  //  - com 8 abas, numa tela de 40 colunas cabiam 3 e o resto ficava atrás de um ">" de 1 caractere, sem como chegar.
+  // Então: (1) arrastar na vertical vira roda do mouse (o tmux entra no copy-mode e rola, como no computador);
+  // (2) deslizar na horizontal troca para a aba vizinha (as mesmas teclas do ⌥ ← / ⌥ →, User9/User10 do tmux.conf);
+  // (3) botões ‹ › de 44 px ao lado do ⌥⇥ fazem o mesmo, para quem não sabe do gesto. O toque curto continua
+  // sendo clique (abas, links, painéis do tmux): só depois de o dedo andar 10 px o gesto é nosso.
+  // Só em tela de toque (pointer:coarse); no computador nada muda.
+  var toqueX = 0, toqueY = 0, toqueModo = '', toqueResto = 0;
+  function toqueAba(dir) { if (!aberto) digita(dir < 0 ? '\x1b[90~' : '\x1b[89~'); }
+  function toqueRoda(dy) {
+    // Sempre no meio da tela: roda em cima da barra de abas é previous/next-window no tmux (WheelUpStatus).
+    var el = t.element.querySelector('.xterm-screen') || t.element, r = el.getBoundingClientRect();
+    el.dispatchEvent(new WheelEvent('wheel', { deltaY: dy, deltaMode: 0, clientX: r.left + r.width / 2,
+      clientY: r.top + r.height / 2, bubbles: true, cancelable: true }));
+  }
+  function toqueInicia() {
+    if (!window.matchMedia || !window.matchMedia('(pointer:coarse)').matches) return;
+    var el = t.element;
+    el.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) { toqueModo = 'x'; return; }
+      toqueX = e.touches[0].clientX; toqueY = e.touches[0].clientY; toqueModo = ''; toqueResto = 0;
+    }, { passive: true });
+    el.addEventListener('touchmove', function (e) {
+      if (toqueModo === 'x' || e.touches.length !== 1) return;
+      var p = e.touches[0], dx = p.clientX - toqueX, dy = p.clientY - toqueY;
+      if (!toqueModo) {
+        if (Math.abs(dx) < 10 && Math.abs(dy) < 10) return;
+        toqueModo = Math.abs(dy) >= Math.abs(dx) ? 'v' : 'h';
+      }
+      e.preventDefault();   // o gesto é nosso: sem quique da página e sem clique no fim
+      if (toqueModo !== 'v') return;
+      // Cada roda rola 5 linhas no copy-mode do tmux: uma roda a cada 3 alturas de célula andadas deixa o texto
+      // acompanhar o dedo um pouco mais rápido que ele (medido: 1 roda por célula corria 5× o dedo).
+      var ch = 3 * (el.querySelector('.xterm-screen') || el).getBoundingClientRect().height / (t.rows || 24);
+      toqueResto += dy; toqueY = p.clientY; toqueX = p.clientX;
+      while (Math.abs(toqueResto) >= ch) {
+        var s = toqueResto > 0 ? 1 : -1;
+        toqueRoda(-s * 100);
+        toqueResto -= s * ch;
+      }
+    }, { passive: false });
+    el.addEventListener('touchend', function (e) {
+      if (toqueModo === 'h') {
+        var p = e.changedTouches[0], dx = p.clientX - toqueX;
+        if (Math.abs(dx) >= 60) toqueAba(dx < 0 ? 1 : -1);   // dedo para a esquerda = próxima aba
+      }
+      toqueModo = '';
+    }, { passive: true });
+    // ‹ › ao lado do ⌥⇥ (mesmo visual; só no celular).
+    var st = document.createElement('style');
+    st.textContent = '.csb-nav{position:fixed;bottom:calc(14px + env(safe-area-inset-bottom));z-index:20;display:flex;' +
+      'align-items:center;justify-content:center;min-width:44px;min-height:44px;padding:0;box-sizing:border-box;' +
+      'border:1px solid rgba(255,255,255,.16);border-radius:16px;opacity:.92;background:rgba(36,36,46,.7);' +
+      '-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);color:#f2f2f7;font:600 22px system-ui,sans-serif;' +
+      'cursor:pointer;-webkit-tap-highlight-color:transparent;touch-action:manipulation}' +
+      '.csb-nav:active{background:rgba(124,77,255,.45)}#csb-ant{left:66px}#csb-prx{left:120px}' +
+      '#csb.on~.csb-nav{display:none}';
+    document.head.appendChild(st);
+    [['csb-ant', '‹', 'Aba anterior', -1], ['csb-prx', '›', 'Próxima aba', 1]].forEach(function (x) {
+      var b = document.createElement('button');
+      b.id = x[0]; b.className = 'csb-nav'; b.type = 'button'; b.tabIndex = -1;
+      b.textContent = x[1]; b.setAttribute('aria-label', x[2]); b.title = x[2];
+      b.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
+      b.addEventListener('click', function () { toqueAba(x[3]); });
+      document.body.appendChild(b);
+    });
+    puxadorInicia();
+    tecladoInicia();
+  }
+
+  // ---- Teclado do celular (19/11/2026, pedido do dono: "ao abrir o teclado deve mover o texto pra cima dele, na
+  // horizontal ou na vertical"). No iPhone o Safari NÃO encolhe a página quando o teclado abre: ele só cobre a metade
+  // de baixo, e a linha em que se digita (o fim do terminal) fica atrás dele. O interactive-widget=resizes-content
+  // da meta viewport (inicio.js) resolve só no Chrome do Android. Aqui a altura da página passa a ser a da área
+  // VISÍVEL (visualViewport), o xterm recalcula as linhas (fit) e o tmux redesenha com menos linhas — o prompt fica
+  // logo acima do teclado, em pé ou deitado. Os botões flutuantes sobem junto (--cs-kb).
+  var tecladoPend = 0, tecladoCheio = {};
+  function tecladoAjusta(hTeste) {
+    tecladoPend = 0;
+    var vv = window.visualViewport;
+    if (!vv && !hTeste) return;
+    var h = Math.round(hTeste || vv.height);
+    // Altura "sem teclado" = a maior área visível já vista nesta largura: diz se o teclado está aberto.
+    var chave = Math.round(vv ? vv.width : window.innerWidth);
+    tecladoCheio[chave] = Math.max(tecladoCheio[chave] || 0, h);
+    var aberto2 = tecladoCheio[chave] - h > 80;
+    // Quanto subir os botões fixos: o que o teclado cobre da área de layout. No iPhone a área de layout não encolhe
+    // (kb = altura do teclado); no Android com resizes-content ela encolhe junto (kb = 0, nada a compensar).
+    var kb = hTeste ? Math.max(0, window.innerHeight - h)
+      : Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop));
+    var raizDoc = document.documentElement;
+    raizDoc.style.setProperty('--cs-kb', kb + 'px');
+    raizDoc.classList.toggle('cs-teclado', aberto2);
+    raizDoc.style.height = h + 'px'; document.body.style.height = h + 'px';
+    // O CSS do ttyd tem html,body{min-height:100%}: sem zerar, a página nunca fica menor que a tela.
+    raizDoc.style.minHeight = '0'; document.body.style.minHeight = '0';
+    if (window.scrollY) window.scrollTo(0, 0);   // o iPhone empurra a página para cima ao focar; volta ao topo
+    // O fit lê a altura nova depois do layout; um segundo fit pega o fim da animação do teclado.
+    requestAnimationFrame(function () { if (window.term && window.term.fit) window.term.fit(); if (puxDesenha) puxDesenha(); });
+    setTimeout(function () { if (window.term && window.term.fit) window.term.fit(); if (puxDesenha) puxDesenha(); }, 350);
+  }
+  function tecladoAgenda() { if (!tecladoPend) tecladoPend = setTimeout(tecladoAjusta, 60); }
+  function tecladoInicia() {
+    var st = document.createElement('style');
+    st.textContent = 'body{height:100%}' +
+      // Celular deitado passa de 600 px e cairia no ⌥⇥ do computador (à direita, em cima da barra de puxar):
+      // em tela de toque ele fica sempre como no celular em pé.
+      '#csb-v{left:12px;right:auto;bottom:calc(14px + env(safe-area-inset-bottom));opacity:.92;min-width:44px;' +
+      'min-height:44px;padding:0 12px;border-radius:16px;font-size:15px}#csb-v.on{display:flex;align-items:center;' +
+      'justify-content:center}' +
+      '#csb-v,.csb-nav{margin-bottom:var(--cs-kb,0px)}' +
+      // Teclado aberto: o prompt é a última linha, à esquerda. Os botões vão para a direita (antes da barra de
+      // puxar) e ficam mais apagados, para não cobrir o que se digita.
+      '.cs-teclado #csb-v{left:auto;right:40px;opacity:.6}' +
+      '.cs-teclado #csb-prx{left:auto;right:102px;opacity:.6}' +
+      '.cs-teclado #csb-ant{left:auto;right:152px;opacity:.6}';
+    document.head.appendChild(st);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', tecladoAgenda);
+      window.visualViewport.addEventListener('scroll', tecladoAgenda);
+    }
+    window.addEventListener('orientationchange', function () { setTimeout(tecladoAjusta, 250); });
+    window.csTeclado = tecladoAjusta;   // teste: csTeclado(<altura visível>) simula o teclado aberto
+    tecladoAjusta();
+  }
+
+  // ---- Barra de puxar (19/11/2026, pedido do dono: "ainda não funciona bem o arrastar a página no mobile; teria como
+  // colocar uma barra de puxar somente no mobile?"). Uma barra de rolagem de verdade na borda direita, só em tela de
+  // toque. A posição vem do próprio tmux: no copy-mode ele escreve "[linha/total]" no alto do painel
+  // (copy-mode-position-format), e a página lê isso do buffer do xterm a cada redesenho. Arrastar o puxador escolhe
+  // a linha alvo; a página manda rodas do mouse (5 linhas cada, o WheelUpPane do tmux) até chegar perto. Puxador
+  // embaixo de tudo = o fim: o tmux sai do copy-mode sozinho (copy-mode -e). Tocar na trilha pula para o ponto.
+  // Em programa de tela cheia (vim, menus) não há "[linha/total]": aí a barra anda por roda relativa ao dedo.
+  var pux = null, puxTrilha = null, puxBolha = null, puxArrasto = false, puxAlvo = null, puxPos = 0, puxTotal = 0,
+    puxUltimaRoda = 0, puxRelY = 0;
+  function puxLe() {
+    // Procura "[n/m]" nas primeiras linhas visíveis (o painel começa depois das 2 linhas da barra e da borda).
+    var b = t.buffer.active;
+    for (var i = 0; i < 6; i++) {
+      var l = b.getLine(b.viewportY + i);
+      var m = l && /\[(\d+)\/(\d+)\]/.exec(l.translateToString(true));
+      if (m) return [parseInt(m[1], 10), parseInt(m[2], 10)];
+    }
+    return null;
+  }
+  function puxArea() {
+    var el = t.element.querySelector('.xterm-screen') || t.element, r = el.getBoundingClientRect();
+    var ch = r.height / (t.rows || 24);
+    var topo = r.top + ch * 3 + 6, base = (window.visualViewport ? window.visualViewport.height : window.innerHeight) - 18;
+    return { topo: topo, alto: Math.max(120, base - topo) };
+  }
+  function puxDesenha() {
+    if (!pux) return;
+    var a = puxArea(), lido = puxLe();
+    if (lido) { puxPos = lido[0]; puxTotal = lido[1]; } else if (!puxArrasto) { puxPos = 0; }
+    puxTrilha.style.top = a.topo + 'px'; puxTrilha.style.height = a.alto + 'px';
+    var alto = 52, livre = a.alto - alto;
+    var fr = puxArrasto && puxAlvo !== null && puxTotal ? puxAlvo / puxTotal : (puxTotal ? puxPos / puxTotal : 0);
+    fr = Math.max(0, Math.min(1, fr));
+    pux.style.top = (a.topo + livre * (1 - fr)) + 'px';   // fr 0 = fim (embaixo); 1 = começo do histórico (em cima)
+    pux.classList.toggle('modo', !!lido);
+    if (puxArrasto) {
+      puxBolha.textContent = puxTotal ? (puxPos ? '↑ ' + puxPos + ' de ' + puxTotal : 'fim') : '…';
+      puxBolha.style.top = (a.topo + livre * (1 - fr) + 12) + 'px';
+    }
+  }
+  function puxPersegue() {
+    // Uma rajada de rodas por quadro, até o alvo; o redesenho seguinte relê a posição e corrige.
+    if (!puxArrasto || puxAlvo === null) return;
+    var agora = Date.now();
+    if (agora - puxUltimaRoda < 30) { requestAnimationFrame(puxPersegue); return; }
+    puxUltimaRoda = agora;
+    var lido = puxLe();
+    if (!lido) {
+      if (puxAlvo > 0) toqueRoda(-100);          // ainda fora do copy-mode: a 1ª roda entra nele
+      requestAnimationFrame(puxPersegue); return;
+    }
+    var dif = puxAlvo - lido[0];
+    if (Math.abs(dif) >= 5) {
+      var n = Math.min(8, Math.floor(Math.abs(dif) / 5));
+      for (var k = 0; k < n; k++) toqueRoda(dif > 0 ? -100 : 100);
+    } else if (puxAlvo === 0 && lido[0] > 0) {
+      toqueRoda(100);                             // últimas linhas até o fim (o tmux sai do copy-mode)
+    }
+    requestAnimationFrame(puxPersegue);
+  }
+  function puxAlvoPelo(y) {
+    var a = puxArea(), livre = a.alto - 52;
+    var fr = 1 - Math.max(0, Math.min(1, (y - 26 - a.topo) / livre));
+    if (fr < 0.02) fr = 0;
+    puxAlvo = Math.round(fr * puxTotal);
+  }
+  function puxadorInicia() {
+    var st = document.createElement('style');
+    st.textContent =
+      '#csb-trilha{position:fixed;right:0;width:34px;z-index:19;touch-action:none;-webkit-tap-highlight-color:transparent}' +
+      '#csb-trilha::before{content:"";position:absolute;right:7px;top:0;bottom:0;width:4px;border-radius:2px;' +
+      'background:rgba(255,255,255,.10)}' +
+      '#csb-pux{position:fixed;right:3px;width:12px;height:52px;z-index:20;border-radius:6px;pointer-events:none;' +
+      'background:rgba(179,136,255,.55);box-shadow:0 0 0 1px rgba(255,255,255,.18);transition:width .12s,right .12s,background .12s}' +
+      '#csb-pux.modo{background:rgba(179,136,255,.85)}' +
+      '#csb-pux.arrasta{width:16px;right:1px;background:#b388ff}' +
+      '#csb-bolha{position:fixed;right:30px;z-index:20;display:none;padding:6px 10px;border-radius:12px;pointer-events:none;' +
+      'background:rgba(36,36,46,.92);border:1px solid rgba(255,255,255,.16);color:#f2f2f7;' +
+      'font:600 13px ui-monospace,Menlo,monospace;transform:translateY(-50%)}' +
+      '#csb.on~#csb-trilha,#csb.on~#csb-pux{display:none}' +
+      '@media (prefers-reduced-motion:reduce){#csb-pux{transition:none}}';
+    document.head.appendChild(st);
+    puxTrilha = document.createElement('div'); puxTrilha.id = 'csb-trilha';
+    puxTrilha.setAttribute('role', 'scrollbar'); puxTrilha.setAttribute('aria-label', 'Rolar o terminal');
+    pux = document.createElement('div'); pux.id = 'csb-pux';
+    puxBolha = document.createElement('div'); puxBolha.id = 'csb-bolha';
+    document.body.appendChild(puxTrilha); document.body.appendChild(pux); document.body.appendChild(puxBolha);
+    puxTrilha.addEventListener('touchstart', function (e) {
+      if (aberto || e.touches.length !== 1) return;
+      e.preventDefault();
+      puxArrasto = true; pux.classList.add('arrasta'); puxBolha.style.display = 'block';
+      puxRelY = e.touches[0].clientY;
+      var lido = puxLe();
+      if (!lido) { toqueRoda(-100); puxTotal = puxTotal || 0; }   // entra no copy-mode para o tmux dizer o total
+      puxAlvoPelo(e.touches[0].clientY);
+      puxDesenha(); requestAnimationFrame(puxPersegue);
+    }, { passive: false });
+    puxTrilha.addEventListener('touchmove', function (e) {
+      if (!puxArrasto) return;
+      e.preventDefault();
+      var y = e.touches[0].clientY;
+      if (puxTotal) puxAlvoPelo(y);
+      else {
+        // Sem "[n/m]" (programa de tela cheia): roda relativa, 1 roda a cada 14 px.
+        while (Math.abs(y - puxRelY) >= 14) { toqueRoda(y < puxRelY ? -100 : 100); puxRelY += y < puxRelY ? -14 : 14; }
+      }
+      puxDesenha();
+    }, { passive: false });
+    function solta() {
+      if (!puxArrasto) return;
+      puxArrasto = false; puxAlvo = null;
+      pux.classList.remove('arrasta'); puxBolha.style.display = 'none';
+      puxDesenha();
+    }
+    puxTrilha.addEventListener('touchend', solta);
+    puxTrilha.addEventListener('touchcancel', solta);
+    t.onRender(puxDesenha);
+    window.addEventListener('resize', puxDesenha);
+    puxDesenha();
+  }
+
   function inicia() {
     var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
     raiz = document.createElement('div'); raiz.id = 'csb';
@@ -796,6 +1046,7 @@
     document.body.appendChild(raiz); document.body.appendChild(volta);
     t.parser.registerOscHandler(7717, recebe);
     barraInicia();
+    toqueInicia();
     document.addEventListener('keydown', teclado, true);
     // ⌥ C com a paleta aberta: anda pelas cores (⇧ volta), como o Tab no ⌥ Tab. No window, antes do atalho da
     // página que manda o ⌥ C ao tmux (que reabriria a paleta do zero).
