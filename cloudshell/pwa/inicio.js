@@ -25,8 +25,11 @@
   // A tela de Sessões (sessoes.js) entra por aqui: o sub_filter do nginx.conf já está no limite de tamanho.
   // logos.js (os logos dos servidores embutidos, gerado por pwa/servidores/gerar-logos.sh) vem antes, em ordem.
   // rede.js (30/10/2026): conexão que não trava na troca de Wi-Fi.
-  ['/logos.js', '/sessoes.js', '/rede.js'].forEach(function (u) {
-    var ss = document.createElement('script'); ss.src = u; ss.async = false;
+  // botoes.js também entra por aqui desde 20/11/2026, e todos com a versão no endereço (__CS_V__ = resumo dos scripts,
+  // posto no build pelo Dockerfile; o nginx põe a mesma no endereço deste arquivo): a Cloudflare e o navegador
+  // guardavam os scripts por até 4 h e a página seguia com o código velho depois de um deploy.
+  ['/botoes.js', '/logos.js', '/sessoes.js', '/rede.js'].forEach(function (u) {
+    var ss = document.createElement('script'); ss.src = u + '?v=__CS_V__'; ss.async = false;
     (document.head || document.documentElement).appendChild(ss);
   });
 

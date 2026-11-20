@@ -47,6 +47,10 @@ COPY pwa/ /srv/pwa/
 # Versão mostrada na tela de Sessões (botão ↻ v…): a do arquivo VERSION do projeto, pelo docker-compose.yml.
 ARG APP_VERSION=0.0.0
 RUN sed -i "s/__APP_VERSION__/${APP_VERSION}/g" /srv/pwa/sessoes.js
+# Versão dos scripts da página no endereço (?v=): resumo do conteúdo deles, para a Cloudflare e o navegador não
+# servirem script velho depois de um deploy (20/11/2026). O nginx.conf põe no inicio.js, e ele nos outros.
+RUN v=$(cat /srv/pwa/*.js | sha1sum | cut -c1-12) \
+ && sed -i "s/__CS_V__/$v/g" /etc/nginx/nginx.conf /srv/pwa/inicio.js
 COPY --from=web /web/dist/ /srv/web/
 COPY --from=gateway /gateway/dist/gateway.mjs /opt/cloudshell/gateway.mjs
 COPY cloudshell-login entrypoint.sh /usr/local/bin/
