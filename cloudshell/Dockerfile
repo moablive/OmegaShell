@@ -44,6 +44,9 @@ COPY --chown=shell:shell known_hosts /home/shell/.ssh/known_hosts
 COPY ssh_config /etc/ssh/ssh_config.d/cloudshell.conf
 COPY nginx.conf /etc/nginx/nginx.conf
 COPY pwa/ /srv/pwa/
+# Versão mostrada na tela de Sessões (botão ↻ v…): a do arquivo VERSION do projeto, pelo docker-compose.yml.
+ARG APP_VERSION=0.0.0
+RUN sed -i "s/__APP_VERSION__/${APP_VERSION}/g" /srv/pwa/sessoes.js
 COPY --from=web /web/dist/ /srv/web/
 COPY --from=gateway /gateway/dist/gateway.mjs /opt/cloudshell/gateway.mjs
 COPY cloudshell-login entrypoint.sh /usr/local/bin/

@@ -124,6 +124,9 @@
     '#css .aviso{margin:0 0 6px;padding:10px 14px;border-radius:12px;background:rgba(255,212,59,.10);border:1px solid rgba(255,212,59,.35);color:#ffe28a;font-size:13px}',
     '#css .vazio{font-size:13px;color:rgba(242,242,247,.45);padding:6px 2px}',
     '#css .rod{margin-top:16px;text-align:center;font-size:11px;color:rgba(242,242,247,.4)}',
+    '#css .ver{display:block;margin:10px auto 0;padding:6px 12px;border:1px solid rgba(255,255,255,.12);border-radius:8px;background:rgba(255,255,255,.05);',
+    'color:rgba(242,242,247,.6);font:600 11px ui-monospace,Menlo,monospace;cursor:pointer}',
+    '#css .ver:hover{color:#fff;background:rgba(255,255,255,.1)}',
     '#css .num{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);padding:8px 16px;border-radius:12px;',
     'background:rgba(179,136,255,.95);color:#14141f;font:700 15px ui-monospace,Menlo,monospace;display:none}',
     // Celular (18/11/2026, pedido do dono; plano do 🎨 UI, Apple HIG + Astryx). Só valia depois da meta viewport do
@@ -189,6 +192,19 @@
     var m = /^([A-Za-z0-9]{1,4})?(⏎)?$/.exec(k || '');
     return m && (m[1] || m[2]) ? (m[1] || '') + (m[2] ? '\r' : '') : null;
   }
+  // A marca é trocada pela versão do arquivo VERSION no build da imagem (Dockerfile, ARG APP_VERSION).
+  var VERSAO = '__APP_VERSION__'.indexOf('__') === 0 ? '0.0.0' : '__APP_VERSION__';
+  // Recarga forçada: atualiza o service worker, esvazia os caches e recarrega; as sessões tmux continuam no servidor.
+  function recarrega() {
+    var fim = function () { location.reload(); };
+    var limpa = function () {
+      try { caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }).then(fim, fim); }
+      catch (e) { fim(); }
+    };
+    try { navigator.serviceWorker.getRegistration().then(function (r) { return r && r.update(); }).then(limpa, limpa); }
+    catch (e) { limpa(); }
+  }
+
   function tag(nome, cls, txt, pai) {
     var e = document.createElement(nome);
     if (cls) e.className = cls;
@@ -362,6 +378,11 @@
       });
     }
     tag('div', 'rod', M.rod, w);
+    // Versão e recarga forçada (20/11/2026, pedido do dono: todo PWA com o botão de recarregar e a versão à vista).
+    // O app instalado não tem o botão de recarregar do navegador. A versão entra no build (Dockerfile troca a marca).
+    var ver = tag('button', 'ver', '↻ Reload forçado · v' + VERSAO, w); ver.type = 'button'; ver.tabIndex = -1;
+    ver.title = 'OmegaShell v' + VERSAO + ' — clique para recarregar à força';
+    ver.addEventListener('click', recarrega);
     tag('div', 'num', null, w).id = 'css-num';
     mostraBuf();
   }
