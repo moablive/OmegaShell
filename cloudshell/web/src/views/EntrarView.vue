@@ -138,7 +138,10 @@ async function enrolado() {
       <p v-if="erro" class="erro">{{ erro }}</p>
       <button type="submit" :disabled="carregando">{{ carregando ? 'Entrando…' : 'Entrar' }}</button>
       <!-- Entrada pelo cofre do LoginHUB: o cofre abre com a digital do aparelho e assina a entrada. -->
-      <button type="button" class="link" :disabled="carregando" @click="entrarPeloCofre">Entrar pelo cofre do LoginHUB</button>
+      <button type="button" class="link" :disabled="carregando" @click="entrarPeloCofre">
+        <!-- logo oficial do LoginHUB (apps/ui/public/favicon.svg do hub) -->
+        <svg width="16" height="16" style="vertical-align: -3px; margin-right: 6px" viewBox="0 0 512 512" aria-hidden="true"><rect width="512" height="512" rx="120" fill="#2563EB"/><path fill="#fff" d="M256 64C256 64 416 96 416 224C416 339.6 348.6 428.6 256 448C163.4 428.6 96 339.6 96 224C96 96 256 64 256 64Z"/><circle cx="256" cy="200" r="30" fill="#2563EB"/><path fill="#2563EB" d="M256 240L230 320H282L256 240Z"/></svg>Entrar pelo cofre do LoginHUB
+      </button>
       <p class="nota">Login da Astral Wave (LoginHUB) com verificação em duas etapas.</p>
     </form>
   </div>
