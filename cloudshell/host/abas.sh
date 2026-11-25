@@ -240,8 +240,13 @@ case $acao in
     fi
     # ⌥ X (25/11/2026, pedido do dono: "faltou o atalho de fechar a aba"): o mesmo ⏻ Encerrar aba do menu, com a
     # mesma confirmação; aba fixa só avisa.
+    # Sem confirmação (25/11/2026, pedido do dono: "sempre deve ser confirmado automaticamente"): aba comum →
+    # kill-window direto; aba de sessão → omega encerrar com OMEGA_SEM_PERGUNTA=1.
     if [[ $aberto == encerrar ]]; then
-      if [[ -z $enc_cmd ]]; then t display-message "a aba $janela é fixa: não fecha"; else t run-shell -C "$enc_cmd"; fi
+      if [[ -z $enc_cmd ]]; then t display-message "a aba $janela é fixa: não fecha"
+      elif [[ $sessao_cmd =~ omega\ entrar\ ([A-Za-z0-9_]+)\ ([A-Za-z0-9._-]+) ]]; then
+        t new-window -n "encerrar-${BASH_REMATCH[2]}" -e OMEGA_ABAS=1 -e OMEGA_SEM_PERGUNTA=1 "/usr/local/bin/omega encerrar ${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+      else t kill-window -t "$w"; fi
       exit 0
     fi
     case $aberto in
