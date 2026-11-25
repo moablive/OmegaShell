@@ -1113,6 +1113,14 @@
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
       if (!aberto) digita('\x1b[91~');
     }, true);
+    // ⌥ X (25/11/2026, pedido do dono: "faltou o atalho de fecha a aba"): encerra a aba, com a pergunta do ⏻ Encerrar
+    // aba — o tmux (User12) a pede ao abas.sh. Pelo e.code: no Mac o Option+X vira ≈. Com o painel aberto não faz nada.
+    window.addEventListener('keydown', function (e) {
+      if (e.code !== 'KeyX' || !e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return;
+      if (e.target && e.target.tagName === 'INPUT') return;
+      e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+      if (!aberto) digita('\x1b[87~');
+    }, true);
     // ⌥ ← e ⌥ → (19/11/2026, pedido do dono: "coloque um atalho opt + seta para navegar entre as abas"): a aba vizinha
     // na barra — o tmux (User9/User10) pula as fixas e dá a volta nas pontas; da tela de Sessões, → vai para a 1ª aba
     // e ← para a última. Com o painel aberto não faz nada; num campo de texto (nome, renomear) as setas são dele.

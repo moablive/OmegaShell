@@ -205,7 +205,7 @@ case $acao in
     cliente=${4:-}
     if [[ $acao == mover ]]; then aberto=mover para=${5:-}; else aberto=${5:-} para=${6:-}; fi
     [[ $cliente =~ ^/dev/pts/[0-9]+$ ]] || exit 0
-    [[ -z $aberto || $aberto == @(mover|tamanho|cor|contexto) ]] || exit 0
+    [[ -z $aberto || $aberto == @(mover|tamanho|cor|contexto|atalhos|encerrar) ]] || exit 0
     [[ -z $para || $para == [edcf] ]] || exit 0
     base="$lib/abas.sh painel $sock $w $cliente"
     titulo="aba $NOMEF"
@@ -238,7 +238,29 @@ case $acao in
     elif [[ -n $jfixa ]]; then ed_k=- ed_d='aba fixa' ed_cmd=''
     else ed_k=p ed_d='fresh ao lado, nesta pasta' ed_cmd='split-window -h -c "#{pane_current_path}" fresh'
     fi
+    # ⌥ X (25/11/2026, pedido do dono: "faltou o atalho de fechar a aba"): o mesmo ⏻ Encerrar aba do menu, com a
+    # mesma confirmação; aba fixa só avisa.
+    if [[ $aberto == encerrar ]]; then
+      if [[ -z $enc_cmd ]]; then t display-message "a aba $janela é fixa: não fecha"; else t run-shell -C "$enc_cmd"; fi
+      exit 0
+    fi
     case $aberto in
+      atalhos)
+        # "⌨️ Mostrar todos os comandos" do ⌥ Tab (25/11/2026, pedido do dono): lista de todos os atalhos, só leitura.
+        btn atalhos "todos os comandos" \
+          'atalhos|⌥ Tab|Abrir este menu|segure e Tab anda; ⇧ volta|-' \
+          'atalhos|⌥ X|Encerrar a aba|pede confirmação|-' \
+          'atalhos|⌥ R|Renomear a aba||-' \
+          'atalhos|⌥ C|Cor da aba|Tab anda pelas cores|-' \
+          'atalhos|⌥ G|Agrupar abas||-' \
+          'atalhos|⌥ V|Dividir ao lado|abre a omega|-' \
+          'atalhos|⌥ ←|Aba da esquerda||-' \
+          'atalhos|⌥ →|Aba da direita||-' \
+          'atalhos|⌥ Enter|Escolher o item|com o ⌥ apertado|-' \
+          'atalhos|⌥ Esc|Cancelar o menu||-' \
+          'atalhos|↩|Voltar ao menu||b'
+        menu_teclas 'Voltar ao menu' b "run-shell \"$base\""
+        exit 0 ;;
       tamanho)
         btn tamanho "tamanho do painel · $janela" 'tamanho|◧|Metade||m' 'tamanho|▯|1/3 (estreito)||1' \
           'tamanho|▭|2/3 (largo)||2' 'tamanho|⊞|Igualar todos||i' 'tamanho|⛶|Tela cheia / voltar||z'
@@ -389,6 +411,7 @@ case $acao in
       "janela|⌧|Fechar editor|$fe_d|$fe_k" \
       'organizar|▦|Grupo…||g' "organizar|⇄|Mover|$([[ $aberto == mover ]] && echo 'aberto abaixo')|m" \
       'organizar|⇔|Tamanho…||t' \
+      'ajuda|⌨️|Mostrar todos os comandos||h' \
       "${bmov[@]}"
     menu_teclas \
       "${mabas[@]}" \
@@ -403,7 +426,8 @@ case $acao in
       "" \
       "▦ Grupo…" g "run-shell \"$lib/abas.sh menu $sock $w $cliente\"" \
       "${mov[@]}" \
-      "⇔ Tamanho…" t "run-shell \"$base tamanho\"" ;;
+      "⇔ Tamanho…" t "run-shell \"$base tamanho\"" \
+      "⌨️ Mostrar todos os comandos" h "run-shell \"$base atalhos\"" ;;
     # A cor saiu do ☰ menu (27/10/2026, pedido do dono): só pelo ⌥ C (e Ctrl-b C), na paleta de caixinhas.
   cs)
     # "☰ CloudShell" da barra: abre só a página inicial do navegador (27/10/2026, pedido do dono; até então era o
