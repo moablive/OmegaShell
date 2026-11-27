@@ -867,9 +867,17 @@ aba_da_sessao() {
     | awk -F'|' -v c="$1" -v s="$2" '$2 == c && $3 == s { print $1; exit }'
 }
 aba_marca() { tmux set -w -t "$1" @omega_conta "$2"; tmux set -w -t "$1" @omega_sid "$3"; }
+# ⌥ X (27/11/2026, pedido do dono: "opt + x deve apenas remover a aba do painel; no início deve ser possível reabrir"):
+# fechar só a aba deixa a sessão viva e a anota em ~/.omega/abas-ocultas ("conta|sessão"); o abas_fixa_terminais não
+# recria a aba dela, e abrir a sessão pelo Início (terminal_abre_aba) tira a nota.
+OCULTAS=${HOME:-/tmp}/.omega/abas-ocultas
+aba_oculta() { [[ -f $OCULTAS ]] && grep -qxF "$1|$2" "$OCULTAS"; }
+aba_oculta_marca() { mkdir -p "${OCULTAS%/*}"; aba_oculta "$1" "$2" || printf '%s|%s\n' "$1" "$2" >> "$OCULTAS"; }
+aba_oculta_tira() { [[ -f $OCULTAS ]] || return 0; local t; t=$(grep -vxF "$1|$2" "$OCULTAS" || true); printf '%s\n' "$t" | grep . > "$OCULTAS" || : > "$OCULTAS"; }
 terminal_abre_aba() {
   local c=$1 s=$2 nome sid w=''
   abas && nome_ok "$s" && contem "$c" "${CONTAS[@]}" "${REMOTOS[@]}" || return 1
+  aba_oculta_tira "$c" "$s"
   nome=$(aba_nome "$c" "$s")
   sid=$(sessao_id "$c" "$s")
   [[ -n $sid ]] && w=$(aba_da_sessao "$c" "$sid")
@@ -918,13 +926,22 @@ abas_sincroniza() {
 # tmux local); o id da sessão (ssh nas remotas) só quando não achou, para pegar aba de sessão renomeada.
 abas_fixa_terminais() {
   abas || return 0
-  local l c s ia st att nome sid w ic lista
+  local l c s ia st att nome sid w ic lista aba_aberta
   # Uma leitura só das abas (id|nome|IA|conta|id da sessão): nada de tmux por sessão quando a aba já existe.
   lista=$(tmux list-windows -F '#{window_id}|#{window_name}|#{@omega_ia}|#{@omega_conta}|#{@omega_sid}')
+  # Notas de aba fechada (⌥ X) de sessão que já acabou saem do arquivo; as vivas ficam sem aba até o Início abrir.
+  if [[ -s $OCULTAS ]]; then
+    local vivas; vivas=$(for l in "${TERMINAIS[@]}"; do IFS='|' read -r c s _ <<< "$l"; printf '%s|%s\n' "$c" "$s"; done)
+    while IFS= read -r l; do
+      grep -qxF "$l" <<< "$vivas" || aba_oculta_tira "${l%%|*}" "${l#*|}"
+    done < "$OCULTAS"
+  fi
   for l in "${TERMINAIS[@]}"; do
     IFS='|' read -r c s ia st att <<< "$l"
     [[ $s == sh-* ]] && continue
     nome_ok "$s" && contem "$c" "${CONTAS[@]}" "${REMOTOS[@]}" || continue
+    aba_aberta=$(awk -F'|' -v n="$(aba_nome "$c" "$s")" '$2 == n { print 1; exit }' <<< "$lista")
+    [[ -z $aba_aberta ]] && aba_oculta "$c" "$s" && continue
     nome=$(aba_nome "$c" "$s")
     case $ia in Claude) ic=claude ;; Gemini) ic=gemini ;; *) ic=terminal ;; esac
     w=$(awk -F'|' -v n="$nome" '$2 == n { print $1; exit }' <<< "$lista")
@@ -1221,6 +1238,10 @@ case ${1:-} in
       if calado; then pausa "$MENU_MSG" || true
       else echo; printf '\e[33m%s\e[0m\n' "$MENU_MSG"; read -rp "Enter = fechar a aba " _ || true; fi
     fi ;;
+  # ⌥ X: anota que a aba da sessão foi fechada de propósito (a sessão segue viva); chamado pelo abas.sh antes do kill-window.
+  ocultar)
+    contem "${2:-}" "${CONTAS[@]}" "${REMOTOS[@]}" && nome_ok "${3:-}" || { echo "uso: omega ocultar <conta|bf|mac|pdv> <sessão>" >&2; exit 2; }
+    aba_oculta_marca "$2" "$3" ;;
   # Encerra uma sessão a partir da aba dela (⏻ Encerrar aba do ⌥ Tab, 28/10/2026, pedido do dono: diferente do
   # ✕ Fechar shell, que só fecha o painel e deixa a sessão viva — e a aba volta): abre numa aba própria com a
   # mesma pergunta da tecla d (Claude: Esc, /quit e a Regra 7 no awlsrv; terminal: kill-session). A aba da sessão

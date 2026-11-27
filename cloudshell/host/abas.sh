@@ -197,6 +197,14 @@ case $acao in
     if [[ $r == '|' ]]; then t set -u -t "$s" @recolhidos; else t set -t "$s" @recolhidos "$r"; fi
     arruma "$s"
     t display-message -d 1200 "$msg" ;;
+  ocultar)
+    # Depois do "Sim" do ⌥ X: anota no omega que a aba foi fechada de propósito e fecha só a aba (a sessão segue).
+    id_ok "$w" || exit 0
+    sc=$(t list-panes -t "$w" -F '#{pane_index} #{pane_start_command}' | awk '$1 == 1 { $1 = ""; print; exit }')
+    if [[ $sc =~ omega\ entrar\ ([A-Za-z0-9_]+)\ ([A-Za-z0-9._-]+) ]]; then
+      /usr/local/bin/omega ocultar "${BASH_REMATCH[1]}" "${BASH_REMATCH[2]}" || exit 0
+    fi
+    t kill-window -t "$w" ;;
   painel|mover)
     # O "☰ menu" da barra (26/10/2026, pedido do dono): montado aqui para o ⇄ Mover abrir como
     # dropdown DENTRO dele — o tmux não tem submenu em cascata, então o mesmo menu reabre no mesmo
@@ -205,7 +213,7 @@ case $acao in
     cliente=${4:-}
     if [[ $acao == mover ]]; then aberto=mover para=${5:-}; else aberto=${5:-} para=${6:-}; fi
     [[ $cliente =~ ^/dev/pts/[0-9]+$ ]] || exit 0
-    [[ -z $aberto || $aberto == @(mover|tamanho|cor|contexto|atalhos|encerrar) ]] || exit 0
+    [[ -z $aberto || $aberto == @(mover|tamanho|cor|contexto|atalhos|encerrar|fechar) ]] || exit 0
     [[ -z $para || $para == [edcf] ]] || exit 0
     base="$lib/abas.sh painel $sock $w $cliente"
     titulo="aba $NOMEF"
@@ -238,15 +246,24 @@ case $acao in
     elif [[ -n $jfixa ]]; then ed_k=- ed_d='aba fixa' ed_cmd=''
     else ed_k=p ed_d='fresh ao lado, nesta pasta' ed_cmd='split-window -h -c "#{pane_current_path}" fresh'
     fi
-    # ⌥ X (25/11/2026, pedido do dono: "faltou o atalho de fechar a aba"): o mesmo ⏻ Encerrar aba do menu, com a
-    # mesma confirmação; aba fixa só avisa.
-    # Sem confirmação (25/11/2026, pedido do dono: "sempre deve ser confirmado automaticamente"): aba comum →
-    # kill-window direto; aba de sessão → omega encerrar com OMEGA_SEM_PERGUNTA=1.
-    if [[ $aberto == encerrar ]]; then
-      if [[ -z $enc_cmd ]]; then t display-message "a aba $janela é fixa: não fecha"
-      elif [[ $sessao_cmd =~ omega\ entrar\ ([A-Za-z0-9_]+)\ ([A-Za-z0-9._-]+) ]]; then
-        t new-window -n "encerrar-${BASH_REMATCH[2]}" -e OMEGA_ABAS=1 -e OMEGA_SEM_PERGUNTA=1 "/usr/local/bin/omega encerrar ${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
-      else t kill-window -t "$w"; fi
+    # ⌥ X e ⌥ E (27/11/2026, pedido do dono): ⌥ X (fechar) só tira a aba do painel, pergunta antes, e a sessão segue
+    # viva — o omega a anota em ~/.omega/abas-ocultas (não recria a aba) e o Início reabre; ⌥ E (encerrar) é o
+    # encerramento completo (aba de sessão: omega encerrar, com a pergunta Sim/Não; aba comum: confirma e mata a aba).
+    # Aba fixa só avisa. Comandos pelo run-shell -C com o cliente: o confirm-before precisa dele.
+    if [[ $aberto == @(fechar|encerrar) ]]; then
+      if [[ -z $enc_cmd ]]; then t display-message "a aba $janela é fixa: não fecha"; exit 0; fi
+      if [[ $sessao_cmd =~ omega\ entrar\ ([A-Za-z0-9_]+)\ ([A-Za-z0-9._-]+) ]]; then
+        sconta=${BASH_REMATCH[1]} ssessao=${BASH_REMATCH[2]}
+        if [[ $aberto == encerrar ]]; then
+          t new-window -n "encerrar-$ssessao" -e OMEGA_ABAS=1 "/usr/local/bin/omega encerrar $sconta $ssessao"
+        else
+          t run-shell -C "$(pergunta "fechar só a aba $janela? A sessão continua e volta pelo Início.") ; confirm-before -t $cliente -p \"fechar só a aba (#W)? y/n\" \"run-shell '$lib/abas.sh ocultar $sock $w'\""
+        fi
+      elif [[ $aberto == encerrar ]]; then
+        t run-shell -C "$(pergunta "encerrar a aba $janela?") ; confirm-before -t $cliente -p \"encerrar a aba (#W)? y/n\" kill-window"
+      else
+        t run-shell -C "$(pergunta "fechar a aba $janela?") ; confirm-before -t $cliente -p \"fechar a aba (#W)? y/n\" kill-window"
+      fi
       exit 0
     fi
     case $aberto in
@@ -254,7 +271,8 @@ case $acao in
         # "⌨️ Mostrar todos os comandos" do ⌥ Tab (25/11/2026, pedido do dono): lista de todos os atalhos, só leitura.
         btn atalhos "todos os comandos" \
           'atalhos|⌥ Tab|Abrir este menu|segure e Tab anda; ⇧ volta|-' \
-          'atalhos|⌥ X|Encerrar a aba|pede confirmação|-' \
+          'atalhos|⌥ X|Fechar a aba|só tira da barra; reabre pelo Início|-' \
+          'atalhos|⌥ E|Encerrar a aba|sai da sessão de vez; pede confirmação|-' \
           'atalhos|⌥ R|Renomear a aba||-' \
           'atalhos|⌥ C|Cor da aba|Tab anda pelas cores|-' \
           'atalhos|⌥ G|Agrupar abas||-' \
