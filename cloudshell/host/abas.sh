@@ -260,9 +260,9 @@ case $acao in
           t run-shell -C "$(pergunta "fechar só a aba $janela? A sessão continua e volta pelo Início.") ; confirm-before -t $cliente -p \"fechar só a aba (#W)? y/n\" \"run-shell '$lib/abas.sh ocultar $sock $w'\""
         fi
       elif [[ $aberto == encerrar ]]; then
-        t run-shell -C "$(pergunta "encerrar a aba $janela?") ; confirm-before -t $cliente -p \"encerrar a aba (#W)? y/n\" kill-window"
+        t run-shell -C "$(pergunta "encerrar a aba $janela?") ; confirm-before -t $cliente -p \"encerrar a aba (#W)? y/n\" \"kill-window -t $w\""
       else
-        t run-shell -C "$(pergunta "fechar a aba $janela?") ; confirm-before -t $cliente -p \"fechar a aba (#W)? y/n\" kill-window"
+        t run-shell -C "$(pergunta "fechar a aba $janela?") ; confirm-before -t $cliente -p \"fechar a aba (#W)? y/n\" \"kill-window -t $w\""
       fi
       exit 0
     fi
