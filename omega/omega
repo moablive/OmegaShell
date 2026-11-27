@@ -735,7 +735,10 @@ diz() { calado || printf "$@"; }
 # pergunta <variável> <prompt>: no OmegaShell lê sem eco e sem prompt (quem digita é o painel).
 pergunta() {
   local -n _resp=$1
-  if calado; then IFS= read -rs _resp; else read -rp "$2" _resp; fi
+  # OMEGA_PERGUNTA_TEMPO (27/11/2026): pergunta abandonada (painel de botões perdido) desiste sozinha em vez de
+  # deixar a aba "encerrar-…" presa para sempre; read -t devolve falha e quem chama cancela.
+  local -a _t=(); [[ -n ${OMEGA_PERGUNTA_TEMPO:-} ]] && _t=(-t "$OMEGA_PERGUNTA_TEMPO")
+  if calado; then IFS= read -rs "${_t[@]}" _resp; else read -rp "$2" "${_t[@]}" _resp; fi
 }
 
 # Botões no navegador (26/10/2026, pedido do dono: os menus em botões no visual do Cmd+Tab do Mac).
@@ -1248,6 +1251,7 @@ case ${1:-} in
   # fecha sozinha quando ela acaba.
   encerrar)
     contem "${2:-}" "${CONTAS[@]}" "${REMOTOS[@]}" && nome_ok "${3:-}" || { echo "uso: omega encerrar <conta|bf|mac|pdv> <sessão>" >&2; exit 2; }
+    OMEGA_PERGUNTA_TEMPO=90   # aba de encerrar sem resposta em 90 s cancela e fecha
     terminais_lista >/dev/null
     ia= st= att=0
     for l in "${TERMINAIS[@]}"; do
@@ -1260,6 +1264,8 @@ case ${1:-} in
     else
       MENU_MSG=
       encerrar "$2" "$3" "$ia" "$st" "$att"; botoes_some
+      # Registro de cada ⌥ E (27/11/2026): sem mensagem = a pergunta foi cancelada ou expirou.
+      mkdir -p "$HOME/sh/logs"; printf '%s %s/%s: %s\n' "$(date '+%d/%m %H:%M:%S')" "$2" "$3" "${MENU_MSG:-cancelado ou sem resposta}" >> "$HOME/sh/logs/encerrar-aba.log"
       # No OmegaShell o resultado não sai no terminal: só o que deu errado fica no painel até o Voltar.
       calado && [[ $MENU_MSG == @(✗|⚠)* ]] && { pausa "$MENU_MSG" || true; }
     fi ;;

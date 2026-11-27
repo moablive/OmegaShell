@@ -1113,6 +1113,7 @@
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
       if (!aberto) digita('\x1b[91~');
     }, true);
+    var semTexto = 0;
     // ⌥ X e ⌥ E (27/11/2026, pedido do dono): ⌥ X pergunta e só fecha a aba (a sessão segue e volta pelo Início); ⌥ E
     // pergunta e encerra de vez. O tmux (User12/User13) pede ao abas.sh. Pelo e.code: no Mac o Option+X vira ≈ e o Option+E
     // é tecla morta. Com o painel aberto não faz nada.
@@ -1121,7 +1122,15 @@
         if (e.code !== a[0] || !e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return;
         if (e.target && e.target.tagName === 'INPUT') return;
         e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+        semTexto = Date.now() + 400;
         if (!aberto) digita(a[1]);
+      }, true);
+    });
+    // Tecla morta do Mac (⌥ E = ´): o navegador ainda compõe o acento e o xterm o digitava na sessão (um ´ ficava no
+    // input do Claude). Por 400 ms depois do ⌥ X/⌥ E, composição e texto digitado não chegam ao terminal.
+    ['compositionstart', 'compositionupdate', 'compositionend', 'beforeinput', 'input'].forEach(function (ev) {
+      window.addEventListener(ev, function (e) {
+        if (Date.now() < semTexto) { e.stopImmediatePropagation(); if (e.cancelable) e.preventDefault(); }
       }, true);
     });
     // ⌥ ← e ⌥ → (19/11/2026, pedido do dono: "coloque um atalho opt + seta para navegar entre as abas"): a aba vizinha
