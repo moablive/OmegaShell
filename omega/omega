@@ -380,10 +380,15 @@ encerrar() {
   fi
   local det="$ia em $(servidor_de "$c")"
   (( ${#av[@]} )) && det="⚠️ $(IFS=';'; printf '%s' "${av[*]}" | sed 's/;/ · /g')"
-  botoes_abre fechar "Fechar $s?$([[ $ia == Claude ]] && echo ' O Claude sai e o servidor salva git e docs antes.')" \
-    "|✅|Sim, fechar|${det//|//}|s⏎" "|↩️|Não||⏎"
-  pergunta ok "Fechar mesmo? Digite s para confirmar: " || return
-  botoes_some
+  # OMEGA_SEM_PERGUNTA=1 (25/11/2026, pedido do dono: o ⌥ X fecha a aba sem confirmar): a pergunta não vem.
+  if [[ ${OMEGA_SEM_PERGUNTA:-} == 1 ]]; then
+    ok=s
+  else
+    botoes_abre fechar "Fechar $s?$([[ $ia == Claude ]] && echo ' O Claude sai e o servidor salva git e docs antes.')" \
+      "|✅|Sim, fechar|${det//|//}|s⏎" "|↩️|Não||⏎"
+    pergunta ok "Fechar mesmo? Digite s para confirmar: " || return
+    botoes_some
+  fi
   [[ $ok == [sS] ]] || return
   if [[ $ia != Claude ]]; then
     tm "$c" kill-session -t "=$s" && msg="✓ $s fechada" || msg="✗ não consegui fechar $s"
